@@ -3,12 +3,18 @@
  * Simple Capital Allocation & Money Management for College Students
  */
 
+const todayIso = new Date().toISOString().split('T')[0];
+
 // Default State
 const DEFAULT_STATE = {
   capital: 1500000,
   cycle: {
-    type: 'monthly', // 'monthly' | 'weekly'
-    startDay: 1      // 1-31 for monthly, 1 (Monday) for weekly
+    type: 'monthly', // 'monthly' | 'weekly' | 'custom_days'
+    monthlyStartDay: 1,      // 1-31
+    weeklyInterval: 1,       // 1, 2, 3, 4 minggu sekali
+    weeklyStartDate: todayIso,
+    customIntervalDays: 1,   // 1 (harian), 3, 5, 10, atau N hari
+    customStartDate: todayIso
   },
   categories: [
     { id: 'cat-needs', name: 'Kebutuhan Pokok (Makan & Kos)', percent: 50, color: '#4f46e5' },
@@ -17,9 +23,9 @@ const DEFAULT_STATE = {
     { id: 'cat-save', name: 'Tabungan & Dana Darurat', percent: 15, color: '#10b981' }
   ],
   expenses: [
-    { id: 'exp-1', amount: 25000, categoryId: 'cat-needs', note: 'Makan siang warteg + es teh', date: new Date().toISOString().split('T')[0] },
-    { id: 'exp-2', amount: 50000, categoryId: 'cat-study', note: 'Beli paket kuota data', date: new Date().toISOString().split('T')[0] },
-    { id: 'exp-3', amount: 28000, categoryId: 'cat-wants', note: 'Kopi susu senja tugas', date: new Date().toISOString().split('T')[0] }
+    { id: 'exp-1', amount: 25000, categoryId: 'cat-needs', note: 'Makan siang warteg + es teh', date: todayIso },
+    { id: 'exp-2', amount: 50000, categoryId: 'cat-study', note: 'Beli paket kuota data', date: todayIso },
+    { id: 'exp-3', amount: 28000, categoryId: 'cat-wants', note: 'Kopi susu senja tugas', date: todayIso }
   ],
   chartMode: 'alloc', // 'alloc' | 'real'
   theme: 'light'
@@ -39,7 +45,17 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT_STATE, ...parsed };
+      const loaded = { ...DEFAULT_STATE, ...parsed };
+      // Migrasi data lama jika ada
+      if (loaded.cycle) {
+        if (!loaded.cycle.monthlyStartDay) loaded.cycle.monthlyStartDay = loaded.cycle.startDay || 1;
+        if (!loaded.cycle.weeklyInterval) loaded.cycle.weeklyInterval = 1;
+        if (!loaded.cycle.weeklyStartDate) loaded.cycle.weeklyStartDate = todayIso;
+        if (!loaded.cycle.customIntervalDays) loaded.cycle.customIntervalDays = 1;
+        if (!loaded.cycle.customStartDate) loaded.cycle.customStartDate = todayIso;
+        if (loaded.cycle.type === 'daily') loaded.cycle.type = 'custom_days';
+      }
+      return loaded;
     }
   } catch (e) {
     console.error('Failed to load local storage state:', e);
@@ -82,46 +98,70 @@ function getCycleInfo() {
   const year = now.getFullYear();
   const month = now.getMonth();
   const today = now.getDate();
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const nowDay = new Date(year, month, today, 0, 0, 0);
 
-  let cycleStart, cycleEnd, remainingDays;
+  let cycleStart, cycleEnd, remainingDays, label, badge;
 
   if (state.cycle.type === 'weekly') {
-    const targetDay = Number(state.cycle.startDay) || 1; // 1 = Monday
-    const currentDay = now.getDay();
-    const diff = (currentDay < targetDay ? currentDay + 7 : currentDay) - targetDay;
+    const weeks = Number(state.cycle.weeklyInterval) || 1;
+    const intervalDays = weeks * 7;
+    const anchorStr = state.cycle.weeklyStartDate || todayIso;
+    const anchorParts = anchorStr.split('-');
+    const anchorDate = new Date(Number(anchorParts[0]), Number(anchorParts[1]) - 1, Number(anchorParts[2]), 0, 0, 0);
+
+    const diffDays = Math.floor((nowDay - anchorDate) / msPerDay);
+    const cycleIndex = Math.floor(diffDays / intervalDays);
     
-    cycleStart = new Date(now);
-    cycleStart.setDate(now.getDate() - diff);
-    cycleStart.setHours(0, 0, 0, 0);
-
-    cycleEnd = new Date(cycleStart);
-    cycleEnd.setDate(cycleStart.getDate() + 6);
-    cycleEnd.setHours(23, 59, 59, 999);
-
-    const msPerDay = 1000 * 60 * 60 * 24;
+    cycleStart = new Date(anchorDate.getTime() + (cycleIndex * intervalDays * msPerDay));
+    cycleEnd = new Date(cycleStart.getTime() + (intervalDays * msPerDay) - 1);
     remainingDays = Math.max(1, Math.ceil((cycleEnd - now) / msPerDay));
+
+    label = weeks === 1 ? '1 Minggu Sekali' : `${weeks} Minggu Sekali`;
+    badge = weeks === 1 ? '1 Minggu' : `${weeks} Minggu`;
+  } else if (state.cycle.type === 'custom_days') {
+    const intervalDays = Math.max(1, Number(state.cycle.customIntervalDays) || 1);
+    const anchorStr = state.cycle.customStartDate || todayIso;
+    const anchorParts = anchorStr.split('-');
+    const anchorDate = new Date(Number(anchorParts[0]), Number(anchorParts[1]) - 1, Number(anchorParts[2]), 0, 0, 0);
+
+    const diffDays = Math.floor((nowDay - anchorDate) / msPerDay);
+    const cycleIndex = Math.floor(diffDays / intervalDays);
+
+    cycleStart = new Date(anchorDate.getTime() + (cycleIndex * intervalDays * msPerDay));
+    cycleEnd = new Date(cycleStart.getTime() + (intervalDays * msPerDay) - 1);
+    remainingDays = Math.max(1, Math.ceil((cycleEnd - now) / msPerDay));
+
+    if (intervalDays === 1) {
+      label = 'Harian (1 Hari)';
+      badge = 'Harian';
+    } else {
+      label = `Per ${intervalDays} Hari`;
+      badge = `${intervalDays} Hari`;
+    }
   } else {
     // Monthly
-    const startDay = Math.min(Number(state.cycle.startDay) || 1, 28);
+    const startDay = Math.min(Number(state.cycle.monthlyStartDay) || 1, 28);
     if (today >= startDay) {
       cycleStart = new Date(year, month, startDay, 0, 0, 0);
-      cycleEnd = new Date(year, month + 1, startDay - 1, 23, 59, 59);
+      cycleEnd = new Date(year, month + 1, startDay - 1, 23, 59, 59, 999);
     } else {
       cycleStart = new Date(year, month - 1, startDay, 0, 0, 0);
-      cycleEnd = new Date(year, month, startDay - 1, 23, 59, 59);
+      cycleEnd = new Date(year, month, startDay - 1, 23, 59, 59, 999);
     }
-    const msPerDay = 1000 * 60 * 60 * 24;
     remainingDays = Math.max(1, Math.ceil((cycleEnd - now) / msPerDay));
+    label = `Bulanan (Tgl ${startDay})`;
+    badge = 'Bulanan';
   }
 
-  return { cycleStart, cycleEnd, remainingDays };
+  return { cycleStart, cycleEnd, remainingDays, label, badge };
 }
 
 // Filter expenses for current cycle
 function getCurrentCycleExpenses() {
   const { cycleStart, cycleEnd } = getCycleInfo();
   return state.expenses.filter(item => {
-    const itemDate = new Date(item.date);
+    const itemDate = new Date(item.date + 'T12:00:00');
     return itemDate >= cycleStart && itemDate <= cycleEnd;
   });
 }
@@ -136,7 +176,8 @@ function updateUI() {
   const capital = Number(state.capital) || 0;
   const remaining = capital - totalSpent;
   const spentPct = capital > 0 ? Math.round((totalSpent / capital) * 100) : 0;
-  const { remainingDays } = getCycleInfo();
+  const cycleInfo = getCycleInfo();
+  const { remainingDays, label, badge } = cycleInfo;
 
   // Daily budget based on remaining money
   const dailySafe = Math.max(0, Math.floor(remaining / remainingDays));
@@ -144,7 +185,7 @@ function updateUI() {
   // Update Header Badges
   const cycleBadge = document.getElementById('cycleBadge');
   if (cycleBadge) {
-    cycleBadge.innerText = state.cycle.type === 'weekly' ? 'Mingguan' : 'Bulanan';
+    cycleBadge.innerText = badge;
   }
 
   // Update Highlight Cards
@@ -158,7 +199,7 @@ function updateUI() {
   const elRemainingDays = document.getElementById('statRemainingDays');
 
   if (elTotalCapital) elTotalCapital.innerText = formatIDR(capital);
-  if (elCycleLabel) elCycleLabel.innerText = `Siklus: ${state.cycle.type === 'weekly' ? 'Mingguan' : 'Bulanan'}`;
+  if (elCycleLabel) elCycleLabel.innerText = `Siklus: ${label}`;
   if (elTotalSpent) elTotalSpent.innerText = formatIDR(totalSpent);
   if (elSpentPercent) elSpentPercent.innerText = `${spentPct}% dari modal`;
   if (elRemaining) elRemaining.innerText = formatIDR(remaining);
@@ -758,6 +799,21 @@ function saveCategoryModal() {
 // CYCLE SETTINGS
 // ==========================================
 
+function selectCycleRadio(type) {
+  const radio = document.querySelector(`input[name="cycleType"][value="${type}"]`);
+  if (radio) radio.checked = true;
+  onCycleTypeChanged(type);
+}
+
+function setQuickCustomDays(days) {
+  state.cycle.type = 'custom_days';
+  state.cycle.customIntervalDays = days;
+  const input = document.getElementById('customDaysInput');
+  if (input) input.value = days;
+  saveState();
+  updateUI();
+}
+
 function onCycleTypeChanged(type) {
   state.cycle.type = type;
   saveState();
@@ -766,13 +822,17 @@ function onCycleTypeChanged(type) {
 
 function updateCycleDateSettings() {
   const mDay = document.getElementById('monthlyStartDay');
-  const wDay = document.getElementById('weeklyStartDay');
+  const wSelect = document.getElementById('weeklyIntervalSelect');
+  const wStart = document.getElementById('weeklyStartDateInput');
+  const cDays = document.getElementById('customDaysInput');
+  const cStart = document.getElementById('customStartDateInput');
 
-  if (state.cycle.type === 'monthly' && mDay) {
-    state.cycle.startDay = Number(mDay.value) || 1;
-  } else if (state.cycle.type === 'weekly' && wDay) {
-    state.cycle.startDay = Number(wDay.value) || 1;
-  }
+  if (mDay) state.cycle.monthlyStartDay = Math.max(1, Math.min(31, Number(mDay.value) || 1));
+  if (wSelect) state.cycle.weeklyInterval = Number(wSelect.value) || 1;
+  if (wStart && wStart.value) state.cycle.weeklyStartDate = wStart.value;
+  if (cDays) state.cycle.customIntervalDays = Math.max(1, Number(cDays.value) || 1);
+  if (cStart && cStart.value) state.cycle.customStartDate = cStart.value;
+
   saveState();
   updateUI();
 }
@@ -783,29 +843,60 @@ function updateSettingsInputs() {
     inputCap.value = state.capital;
   }
 
+  const cycleInfo = getCycleInfo();
   const allocCycleText = document.getElementById('allocCycleText');
   if (allocCycleText) {
-    allocCycleText.innerText = state.cycle.type === 'weekly' ? 'Mingguan' : 'Bulanan';
+    allocCycleText.innerText = cycleInfo.label;
   }
 
-  const radioMonthly = document.querySelector('input[name="cycleType"][value="monthly"]');
-  const radioWeekly = document.querySelector('input[name="cycleType"][value="weekly"]');
+  // Radios
+  const curType = state.cycle.type;
+  const radio = document.querySelector(`input[name="cycleType"][value="${curType}"]`);
+  if (radio) radio.checked = true;
+
+  // Cards styling & wrap opacities
+  const cardMonthly = document.getElementById('cardCycleMonthly');
+  const cardWeekly = document.getElementById('cardCycleWeekly');
+  const cardCustom = document.getElementById('cardCycleCustom');
+
   const mWrap = document.getElementById('monthlySettingsWrap');
   const wWrap = document.getElementById('weeklySettingsWrap');
-  const mInput = document.getElementById('monthlyStartDay');
-  const wInput = document.getElementById('weeklyStartDay');
+  const cWrap = document.getElementById('customSettingsWrap');
 
-  if (state.cycle.type === 'weekly') {
-    if (radioWeekly) radioWeekly.checked = true;
-    if (mWrap) mWrap.classList.add('opacity-50', 'pointer-events-none');
-    if (wWrap) wWrap.classList.remove('opacity-50', 'pointer-events-none');
-    if (wInput) wInput.value = state.cycle.startDay;
-  } else {
-    if (radioMonthly) radioMonthly.checked = true;
+  [cardMonthly, cardWeekly, cardCustom].forEach(card => {
+    if (card) card.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/20', 'dark:bg-indigo-950/20');
+  });
+
+  if (curType === 'monthly') {
+    if (cardMonthly) cardMonthly.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/20', 'dark:bg-indigo-950/20');
     if (mWrap) mWrap.classList.remove('opacity-50', 'pointer-events-none');
     if (wWrap) wWrap.classList.add('opacity-50', 'pointer-events-none');
-    if (mInput) mInput.value = state.cycle.startDay;
+    if (cWrap) cWrap.classList.add('opacity-50', 'pointer-events-none');
+  } else if (curType === 'weekly') {
+    if (cardWeekly) cardWeekly.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/20', 'dark:bg-indigo-950/20');
+    if (mWrap) mWrap.classList.add('opacity-50', 'pointer-events-none');
+    if (wWrap) wWrap.classList.remove('opacity-50', 'pointer-events-none');
+    if (cWrap) cWrap.classList.add('opacity-50', 'pointer-events-none');
+  } else {
+    // custom_days
+    if (cardCustom) cardCustom.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/20', 'dark:bg-indigo-950/20');
+    if (mWrap) mWrap.classList.add('opacity-50', 'pointer-events-none');
+    if (wWrap) wWrap.classList.add('opacity-50', 'pointer-events-none');
+    if (cWrap) cWrap.classList.remove('opacity-50', 'pointer-events-none');
   }
+
+  // Populate input values
+  const mDay = document.getElementById('monthlyStartDay');
+  const wSelect = document.getElementById('weeklyIntervalSelect');
+  const wStart = document.getElementById('weeklyStartDateInput');
+  const cDays = document.getElementById('customDaysInput');
+  const cStart = document.getElementById('customStartDateInput');
+
+  if (mDay) mDay.value = state.cycle.monthlyStartDay || 1;
+  if (wSelect) wSelect.value = state.cycle.weeklyInterval || 1;
+  if (wStart) wStart.value = state.cycle.weeklyStartDate || todayIso;
+  if (cDays) cDays.value = state.cycle.customIntervalDays || 1;
+  if (cStart) cStart.value = state.cycle.customStartDate || todayIso;
 }
 
 // ==========================================
