@@ -91,19 +91,29 @@
         <p id="sideRemainingDays" class="text-[11px] text-emerald-400 font-semibold">Sisa 0 hari lagi</p>
       </div>
 
-      <div class="flex items-center justify-between px-1">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-xs font-bold text-purple-300">
-            HR
-          </div>
-          <div class="text-xs">
-            <p class="font-semibold text-white">Haryo Seno</p>
-            <p class="text-[10px] text-[#9f96b5]">Anak Kuliahan</p>
+      <div class="p-2 rounded-xl bg-[#1b1232] border border-[#2d1f50] hover:border-purple-500/40 transition">
+        <div class="flex items-center justify-between">
+          <button onclick="openProfileSwitchModal()" class="flex items-center gap-2.5 text-left group flex-1 mr-2 min-w-0" title="Klik untuk Ganti Profil User">
+            <div id="sideUserAvatar" class="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-xs font-bold text-purple-300 group-hover:scale-105 transition shrink-0">
+              HR
+            </div>
+            <div class="text-xs min-w-0 flex-1">
+              <div class="flex items-center gap-1">
+                <p id="sideUserName" class="font-semibold text-white truncate group-hover:text-purple-300 transition">Haryo Seno</p>
+                <i data-lucide="chevrons-up-down" class="w-3 h-3 text-[#9f96b5] shrink-0"></i>
+              </div>
+              <p id="sideUserRole" class="text-[10px] text-[#9f96b5] truncate">Anak Kuliahan</p>
+            </div>
+          </button>
+          <div class="flex items-center gap-0.5 shrink-0">
+            <button onclick="openProfileSwitchModal()" title="Ganti Profil" class="p-1.5 text-[#9f96b5] hover:text-purple-300 rounded-lg hover:bg-white/5 transition">
+              <i data-lucide="users" class="w-4 h-4"></i>
+            </button>
+            <button onclick="openHelpModal()" title="Panduan Akses HP & Laptop" class="p-1.5 text-[#9f96b5] hover:text-white rounded-lg hover:bg-white/5 transition">
+              <i data-lucide="smartphone" class="w-4 h-4"></i>
+            </button>
           </div>
         </div>
-        <button onclick="openHelpModal()" title="Panduan Akses HP & Laptop" class="p-1.5 text-[#9f96b5] hover:text-white rounded-lg hover:bg-white/5 transition">
-          <i data-lucide="smartphone" class="w-4 h-4"></i>
-        </button>
       </div>
     </div>
   </aside>
@@ -133,8 +143,8 @@
         <span id="mobileCycleBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
           Bulanan
         </span>
-        <button onclick="openHelpModal()" class="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-xs font-bold text-purple-300">
-          HR
+        <button onclick="openProfileSwitchModal()" id="mobileProfileBtn" title="Ganti Profil Pengguna" class="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-xs font-bold text-purple-300 transition active:scale-95 shadow-sm">
+          <span id="mobileUserAvatar">HR</span>
         </button>
       </div>
     </header>
@@ -151,6 +161,15 @@
       </div>
 
       <div class="flex items-center gap-3">
+        <!-- Quick Profile Switcher Badge in Desktop Header -->
+        <button onclick="openProfileSwitchModal()" class="px-3 py-1.5 rounded-xl bg-[#1b1232] border border-[#2d1f50] hover:border-purple-500/50 hover:bg-[#231840] transition flex items-center gap-2 text-xs font-medium text-white shadow-sm" title="Klik untuk Ganti Profil User">
+          <div id="desktopUserAvatar" class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center justify-center text-[10px] font-bold">
+            HR
+          </div>
+          <span id="desktopUserName" class="max-w-[130px] truncate font-semibold">Haryo Seno</span>
+          <i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-[#9f96b5]"></i>
+        </button>
+
         <button onclick="switchTab('expenses')" class="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center gap-1.5">
           <i data-lucide="plus" class="w-3.5 h-3.5"></i> Catat Transaksi
         </button>
@@ -627,6 +646,26 @@
            ============================================== -->
       <div id="tabContent-settings" class="tab-panel hidden space-y-6">
         
+        <!-- Manajemen Profil / User (Multi-Profile) -->
+        <div class="alloc-card p-5 space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 class="font-bold text-white text-base flex items-center gap-2">
+                <i data-lucide="users" class="w-4 h-4 text-purple-400"></i>
+                Manajemen Profil & Akun Pengguna
+              </h3>
+              <p class="text-xs text-[#9f96b5]">Kelola profil keuangan terpisah (misal: Pribadi, Kas Kosan/Kontrakan, Usaha Sampingan, atau Teman)</p>
+            </div>
+            <button onclick="openProfileEditModal(null)" class="px-3.5 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition flex items-center gap-1.5 self-start sm:self-auto shadow-md shadow-purple-600/30">
+              <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Tambah Profil Baru
+            </button>
+          </div>
+
+          <div id="settingsProfilesList" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
         <!-- Siklus Keuangan -->
         <div class="alloc-card p-5 space-y-4">
           <div>
@@ -883,6 +922,145 @@
     </div>
   </div>
 
+  <!-- MODAL: SWITCH PROFILE (QUICK SWITCHER) -->
+  <div id="modalProfileSwitch" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="alloc-card max-w-md w-full p-5 sm:p-6 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between mb-3 shrink-0">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="users" class="w-4 h-4 text-purple-400"></i> Pilih Profil Pengguna
+          </h3>
+          <p class="text-xs text-[#9f96b5] mt-0.5">Beralih akun atau kelola profil keuangan terpisah.</p>
+        </div>
+        <button onclick="closeProfileSwitchModal()" class="text-[#9f96b5] hover:text-white transition p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- List of Profiles (Scrollable) -->
+      <div id="modalProfileSwitchList" class="space-y-2.5 overflow-y-auto pr-1 my-3 flex-1 max-h-[50vh]">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="pt-3 border-t border-[#2d1f50] flex items-center justify-between gap-2 shrink-0">
+        <button onclick="openProfileEditModal(null)" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-purple-600 hover:bg-purple-500 text-white transition flex items-center gap-1.5 shadow-md shadow-purple-600/30">
+          <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Tambah Profil
+        </button>
+        <button onclick="closeProfileSwitchModal()" class="px-4 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition">
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT PROFILE -->
+  <div id="modalProfileEdit" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="alloc-card max-w-md w-full p-5 sm:p-6 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="modalProfileEditTitle" class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="user-plus" class="w-4 h-4 text-purple-400"></i> Tambah Profil Baru
+        </h3>
+        <button onclick="closeProfileEditModal()" class="text-[#9f96b5] hover:text-white transition p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="profEditId" value="">
+
+      <div class="space-y-4">
+        <!-- Avatar / Emote & Color -->
+        <div class="p-3.5 rounded-2xl bg-[#150d28] border border-purple-500/30 space-y-3">
+          <label class="text-xs font-bold text-white flex items-center gap-1.5">
+            <span>🎭</span> Avatar / Inisial / Emoticon
+          </label>
+
+          <div class="flex items-center gap-3">
+            <div id="profAvatarPreview" class="w-14 h-14 rounded-2xl bg-[#231840] border-2 border-purple-500/60 flex items-center justify-center text-xl font-bold text-purple-300 shrink-0 shadow-lg shadow-purple-500/20">
+              HR
+            </div>
+            <div class="flex-1">
+              <label class="block text-[11px] text-[#9f96b5] mb-1">Inisial (2 huruf) atau Emote:</label>
+              <input type="text" id="profAvatarInput" maxlength="6" value="HR" placeholder="HR / 👤"
+                class="w-full px-3 py-1.5 text-base bg-[#1b1232] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white text-center font-bold tracking-wider"
+                oninput="onProfAvatarChanged(this.value)">
+            </div>
+          </div>
+
+          <!-- Quick Avatars / Emojis -->
+          <div>
+            <p class="text-[10px] font-semibold text-[#9f96b5] mb-1.5">Pilihan Cepat:</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button type="button" onclick="setQuickProfAvatar('👤')" class="w-8 h-8 rounded-lg bg-[#1b1232] hover:bg-purple-950/60 border border-[#2d1f50] text-sm flex items-center justify-center">👤</button>
+              <button type="button" onclick="setQuickProfAvatar('💼')" class="w-8 h-8 rounded-lg bg-[#1b1232] hover:bg-purple-950/60 border border-[#2d1f50] text-sm flex items-center justify-center">💼</button>
+              <button type="button" onclick="setQuickProfAvatar('🏠')" class="w-8 h-8 rounded-lg bg-[#1b1232] hover:bg-purple-950/60 border border-[#2d1f50] text-sm flex items-center justify-center">🏠</button>
+              <button type="button" onclick="setQuickProfAvatar('🎓')" class="w-8 h-8 rounded-lg bg-[#1b1232] hover:bg-purple-950/60 border border-[#2d1f50] text-sm flex items-center justify-center">🎓</button>
+              <button type="button" onclick="setQuickProfAvatar('🚀')" class="w-8 h-8 rounded-lg bg-[#1b1232] hover:bg-purple-950/60 border border-[#2d1f50] text-sm flex items-center justify-center">🚀</button>
+              <button type="button" onclick="setQuickProfAvatar('🍕')" class="w-8 h-8 rounded-lg bg-[#1b1232] hover:bg-purple-950/60 border border-[#2d1f50] text-sm flex items-center justify-center">🍕</button>
+              <button type="button" onclick="setQuickProfAvatar('💰')" class="w-8 h-8 rounded-lg bg-[#1b1232] hover:bg-purple-950/60 border border-[#2d1f50] text-sm flex items-center justify-center">💰</button>
+            </div>
+          </div>
+
+          <!-- Accent Color -->
+          <div class="pt-2 border-t border-[#2d1f50]/60">
+            <p class="text-[10px] font-semibold text-[#9f96b5] mb-1.5">Warna Aksen Profil:</p>
+            <div class="flex items-center gap-2">
+              <div id="profColorSwatches" class="flex flex-wrap gap-1.5 flex-1">
+                <!-- Color dots -->
+              </div>
+              <input type="color" id="profColorInput" value="#9d50ff" class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent shrink-0" onchange="onProfColorChanged(this.value)">
+            </div>
+          </div>
+        </div>
+
+        <!-- Nama Profil -->
+        <div>
+          <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Nama Profil / Pengguna</label>
+          <input type="text" id="profNameInput" placeholder="Contoh: Haryo Seno / Kas Kosan / Bisnis Thrifting"
+            class="w-full px-3 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white"
+            oninput="onProfNameInputChanged(this.value)">
+        </div>
+
+        <!-- Role / Keterangan -->
+        <div>
+          <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Peran / Keterangan Profil</label>
+          <input type="text" id="profRoleInput" placeholder="Contoh: Anak Kuliahan / Bendahara Kos / Freelancer"
+            class="w-full px-3 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white">
+        </div>
+
+        <!-- Only visible when creating a NEW profile -->
+        <div id="profNewExtraFields" class="space-y-4 pt-2 border-t border-[#2d1f50]/60">
+          <div>
+            <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Modal Awal / Total Pool (Rp)</label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-xs font-bold text-[#6f6585]">Rp</span>
+              <input type="number" id="profCapitalInput" min="0" step="50000" value="1500000" placeholder="1500000"
+                class="w-full pl-10 pr-3 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white font-bold">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Template Pos Alokasi Awal:</label>
+            <select id="profTemplateSelect" class="w-full px-3 py-2 text-xs bg-[#150d28] border border-[#2d1f50] rounded-xl text-white">
+              <option value="standard">Template Mahasiswa (Kosan, Makan, Kuliah, Nongkrong, Tabungan)</option>
+              <option value="simple">Template Kas Sederhana (Operasional Utama 100%)</option>
+              <option value="empty">Kosongkan Pos (Atur Sendiri Nanti)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 mt-6 pt-3 border-t border-[#2d1f50]">
+        <button type="button" onclick="closeProfileEditModal()" class="px-3.5 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition">
+          Batal
+        </button>
+        <button type="button" onclick="saveProfileModal()" class="px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30 transition">
+          Simpan Profil
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: HELP & CROSS-DEVICE ACCESS -->
   <div id="modalHelp" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
     <div class="alloc-card max-w-md w-full p-5 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[90vh] overflow-y-auto">
@@ -919,6 +1097,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.3"></script>
+  <script src="app.js?v=2.4"></script>
 </body>
 </html>

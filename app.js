@@ -28,8 +28,13 @@ const STANDARD_EMOJIS = [
   '🍕', '✈️', '💻', '🏖️', '🏋️', '🐱', '🚌', '🔧'
 ];
 
-// Default State with Nominal-First Categories
-const DEFAULT_STATE = {
+// Default Profile Template
+const DEFAULT_PROFILE = {
+  id: 'prof-default',
+  name: 'Haryo Seno',
+  role: 'Anak Kuliahan',
+  avatar: 'HR',
+  color: '#9d50ff',
   capital: 1500000,
   cycle: {
     type: 'monthly', // 'monthly' | 'weekly' | 'custom_days'
@@ -55,7 +60,15 @@ const DEFAULT_STATE = {
     { id: 'inc-1', amount: 200000, title: 'Freelance Desain Poster BEM', date: todayIso, allocMode: 'proportional', targetCategoryId: null }
   ],
   analysisTab: 'expense', // 'expense' | 'income' | 'budget'
-  cycleOffset: 0,
+  cycleOffset: 0
+};
+
+// Default State with Multi-Profile Support
+const DEFAULT_STATE = {
+  activeProfileId: 'prof-default',
+  profiles: [
+    JSON.parse(JSON.stringify(DEFAULT_PROFILE))
+  ],
   theme: 'dark'
 };
 
@@ -63,6 +76,17 @@ const STORAGE_KEY = 'kapitalkula_app_data_v1';
 let state = loadState();
 let pieChartInstance = null;
 let barChartInstance = null;
+
+// Helper: Convert Hex color to RGBA
+function hexToRgba(hex, alpha = 1) {
+  if (!hex || typeof hex !== 'string' || !hex.startsWith('#') || hex.length < 7) {
+    return `rgba(157, 80, 255, ${alpha})`;
+  }
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 // ==========================================
 // STATE PERSISTENCE & INITIALIZATION
@@ -82,48 +106,154 @@ function getCategoryEmojiFallback(cat) {
   return '📁';
 }
 
+function getActiveProfile() {
+  if (!state.profiles || !Array.isArray(state.profiles) || state.profiles.length === 0) {
+    state.profiles = [JSON.parse(JSON.stringify(DEFAULT_PROFILE))];
+    state.activeProfileId = state.profiles[0].id;
+  }
+  let active = state.profiles.find(p => p.id === state.activeProfileId);
+  if (!active) {
+    active = state.profiles[0];
+    state.activeProfileId = active.id;
+  }
+  return active;
+}
+
+function syncProfileToState(targetState, profile) {
+  targetState.activeProfileId = profile.id;
+  targetState.capital = profile.capital !== undefined ? profile.capital : 1500000;
+  targetState.cycle = profile.cycle;
+  targetState.categories = profile.categories;
+  targetState.expenses = profile.expenses;
+  targetState.incomes = profile.incomes;
+  targetState.analysisTab = profile.analysisTab || 'expense';
+  targetState.cycleOffset = profile.cycleOffset || 0;
+}
+
+function syncStateToActiveProfile() {
+  if (!state.profiles || !Array.isArray(state.profiles)) return;
+  const active = getActiveProfile();
+  active.capital = state.capital;
+  active.cycle = state.cycle;
+  active.categories = state.categories;
+  active.expenses = state.expenses;
+  active.incomes = state.incomes;
+  active.analysisTab = state.analysisTab;
+  active.cycleOffset = state.cycleOffset;
+}
+
+function normalizeProfile(prof, idx = 0) {
+  if (!prof.id) prof.id = 'prof-' + (idx + 1) + '-' + Date.now().toString(36);
+  if (!prof.name) prof.name = idx === 0 ? 'Haryo Seno' : `Pengguna ${idx + 1}`;
+  if (!prof.role) prof.role = idx === 0 ? 'Anak Kuliahan' : 'Personal';
+  if (!prof.avatar) {
+    prof.avatar = prof.name.substring(0, 2).toUpperCase() || '👤';
+  }
+  if (!prof.color) prof.color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
+  if (prof.capital === undefined || isNaN(Number(prof.capital))) prof.capital = 1500000;
+  if (!prof.expenses || !Array.isArray(prof.expenses)) prof.expenses = [];
+  if (!prof.incomes || !Array.isArray(prof.incomes)) prof.incomes = [];
+  if (!prof.analysisTab) prof.analysisTab = 'expense';
+  if (prof.cycleOffset === undefined) prof.cycleOffset = 0;
+
+  if (!prof.cycle || typeof prof.cycle !== 'object') {
+    prof.cycle = {
+      type: 'monthly',
+      monthlyStartDay: 1,
+      weeklyInterval: 1,
+      weeklyStartDate: todayIso,
+      customIntervalDays: 1,
+      customStartDate: todayIso
+    };
+  }
+  if (!prof.cycle.monthlyStartDay) prof.cycle.monthlyStartDay = prof.cycle.startDay || 1;
+  if (!prof.cycle.weeklyInterval) prof.cycle.weeklyInterval = 1;
+  if (!prof.cycle.weeklyStartDate) prof.cycle.weeklyStartDate = todayIso;
+  if (!prof.cycle.customIntervalDays) prof.cycle.customIntervalDays = 1;
+  if (!prof.cycle.customStartDate) prof.cycle.customStartDate = todayIso;
+  if (prof.cycle.type === 'daily') prof.cycle.type = 'custom_days';
+
+  const cap = Number(prof.capital) || 1500000;
+  if (Array.isArray(prof.categories) && prof.categories.length > 0) {
+    prof.categories.forEach((cat, cIdx) => {
+      if (!cat.emoji) cat.emoji = getCategoryEmojiFallback(cat);
+      if (!cat.color) cat.color = COLOR_PALETTE[cIdx % COLOR_PALETTE.length];
+      if (cat.targetAmount === undefined || cat.targetAmount === null || isNaN(cat.targetAmount)) {
+        cat.targetAmount = Math.round(cap * ((cat.percent || 20) / 100));
+      }
+    });
+  } else {
+    prof.categories = JSON.parse(JSON.stringify(DEFAULT_PROFILE.categories));
+  }
+}
+
+function loadStateFromObject(parsed) {
+  if (!parsed || typeof parsed !== 'object') {
+    const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    syncProfileToState(fresh, fresh.profiles[0]);
+    return fresh;
+  }
+
+  // Backward compatibility: If no `profiles` array exists, wrap legacy single-user state into profile 0
+  if (!parsed.profiles || !Array.isArray(parsed.profiles) || parsed.profiles.length === 0) {
+    const migratedProfile = {
+      id: 'prof-default',
+      name: 'Haryo Seno',
+      role: 'Anak Kuliahan',
+      avatar: 'HR',
+      color: '#9d50ff',
+      capital: parsed.capital !== undefined ? parsed.capital : 1500000,
+      cycle: parsed.cycle || {
+        type: 'monthly',
+        monthlyStartDay: 1,
+        weeklyInterval: 1,
+        weeklyStartDate: todayIso,
+        customIntervalDays: 1,
+        customStartDate: todayIso
+      },
+      categories: parsed.categories || JSON.parse(JSON.stringify(DEFAULT_PROFILE.categories)),
+      expenses: parsed.expenses || JSON.parse(JSON.stringify(DEFAULT_PROFILE.expenses)),
+      incomes: parsed.incomes || JSON.parse(JSON.stringify(DEFAULT_PROFILE.incomes)),
+      analysisTab: parsed.analysisTab || 'expense',
+      cycleOffset: parsed.cycleOffset || 0
+    };
+    parsed.activeProfileId = 'prof-default';
+    parsed.profiles = [migratedProfile];
+  }
+
+  // Normalize all profiles
+  parsed.profiles.forEach((prof, idx) => normalizeProfile(prof, idx));
+
+  // Ensure activeProfileId is valid
+  if (!parsed.activeProfileId || !parsed.profiles.some(p => p.id === parsed.activeProfileId)) {
+    parsed.activeProfileId = parsed.profiles[0].id;
+  }
+
+  // Mirror active profile properties to top-level state
+  const active = parsed.profiles.find(p => p.id === parsed.activeProfileId) || parsed.profiles[0];
+  syncProfileToState(parsed, active);
+
+  return parsed;
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      const loaded = { ...DEFAULT_STATE, ...parsed };
-      if (!loaded.incomes) loaded.incomes = [];
-      if (!loaded.analysisTab) loaded.analysisTab = 'expense';
-      if (loaded.cycleOffset === undefined) loaded.cycleOffset = 0;
-
-      const cap = Number(loaded.capital) || 1500000;
-
-      // Ensure every category has emoji, distinct color, and targetAmount (Rp)
-      if (Array.isArray(loaded.categories)) {
-        loaded.categories.forEach((cat, idx) => {
-          if (!cat.emoji) cat.emoji = getCategoryEmojiFallback(cat);
-          if (!cat.color) cat.color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
-          // Backward compatibility: migrate percent to targetAmount if targetAmount missing
-          if (cat.targetAmount === undefined || cat.targetAmount === null || isNaN(cat.targetAmount)) {
-            cat.targetAmount = Math.round(cap * ((cat.percent || 20) / 100));
-          }
-        });
-      }
-
-      if (loaded.cycle) {
-        if (!loaded.cycle.monthlyStartDay) loaded.cycle.monthlyStartDay = loaded.cycle.startDay || 1;
-        if (!loaded.cycle.weeklyInterval) loaded.cycle.weeklyInterval = 1;
-        if (!loaded.cycle.weeklyStartDate) loaded.cycle.weeklyStartDate = todayIso;
-        if (!loaded.cycle.customIntervalDays) loaded.cycle.customIntervalDays = 1;
-        if (!loaded.cycle.customStartDate) loaded.cycle.customStartDate = todayIso;
-        if (loaded.cycle.type === 'daily') loaded.cycle.type = 'custom_days';
-      }
-      return loaded;
+      return loadStateFromObject(parsed);
     }
   } catch (e) {
     console.error('Failed to load local storage state:', e);
   }
-  return JSON.parse(JSON.stringify(DEFAULT_STATE));
+  const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  syncProfileToState(fresh, fresh.profiles[0]);
+  return fresh;
 }
 
 function saveState() {
   try {
+    syncStateToActiveProfile();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
     console.error('Failed to save state to localStorage:', e);
@@ -410,6 +540,9 @@ function updateUI() {
 
   // Settings inputs
   updateSettingsInputs();
+
+  // Multi-Profile elements & cards
+  renderProfileElements();
 
   // Refresh Lucide Icons
   if (window.lucide) {
@@ -1611,6 +1744,7 @@ function updateSettingsInputs() {
 // ==========================================
 
 function exportDataJSON() {
+  syncStateToActiveProfile();
   const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
   const dlAnchor = document.createElement('a');
   const filename = `allocata_backup_${new Date().toISOString().split('T')[0]}.json`;
@@ -1627,18 +1761,11 @@ function importDataJSON(event) {
   reader.onload = function(e) {
     try {
       const imported = JSON.parse(e.target.result);
-      if (imported.categories && imported.capital !== undefined) {
-        state = { ...DEFAULT_STATE, ...imported };
-        const cap = Number(state.capital) || 1500000;
-        state.categories.forEach((cat, idx) => {
-          if (!cat.emoji) cat.emoji = getCategoryEmojiFallback(cat);
-          if (!cat.color) cat.color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
-          if (cat.targetAmount === undefined || cat.targetAmount === null || isNaN(cat.targetAmount)) {
-            cat.targetAmount = Math.round(cap * ((cat.percent || 20) / 100));
-          }
-        });
+      if ((imported.profiles && Array.isArray(imported.profiles)) || (imported.categories && imported.capital !== undefined)) {
+        state = loadStateFromObject(imported);
         saveState();
         updateUI();
+        showToast('Data & profil berhasil diimpor!');
         alert('Data berhasil diimpor!');
       } else {
         alert('Format file JSON tidak sesuai.');
@@ -1651,13 +1778,441 @@ function importDataJSON(event) {
 }
 
 function confirmResetData() {
-  if (confirm('Yakin ingin mereset semua data ke pengaturan awal? Semua catatan akan terhapus.')) {
+  if (confirm('Yakin ingin mereset semua data ke pengaturan awal? Semua profil, pos alokasi, dan catatan akan terhapus.')) {
     localStorage.removeItem(STORAGE_KEY);
     state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    syncProfileToState(state, state.profiles[0]);
     saveState();
     updateUI();
-    alert('Data berhasil direset.');
+    showToast('Data berhasil direset ke pengaturan awal.');
   }
+}
+
+// ==========================================
+// MULTI-PROFILE & USER MANAGEMENT
+// ==========================================
+
+function switchProfile(profileId) {
+  syncStateToActiveProfile();
+  const target = state.profiles.find(p => p.id === profileId);
+  if (!target) return;
+
+  syncProfileToState(state, target);
+  saveState();
+  closeProfileSwitchModal();
+  updateUI();
+  showToast(`Beralih ke profil "${target.name}"`);
+}
+
+function createProfile(name, role, avatar, color, initialCapital, templateKey) {
+  syncStateToActiveProfile();
+  const newId = 'prof-' + Date.now();
+  const cap = Number(initialCapital) || 1500000;
+  let newCategories = [];
+
+  if (templateKey === 'standard') {
+    newCategories = [
+      { id: 'cat-needs-' + Date.now(), name: 'Kosan', targetAmount: Math.round(cap * 0.35), color: '#f87171', emoji: '🏠' },
+      { id: 'cat-daily-' + Date.now(), name: 'Makan & Harian', targetAmount: Math.round(cap * 0.30), color: '#fbbf24', emoji: '🍜' },
+      { id: 'cat-study-' + Date.now(), name: 'Kebutuhan Kuliah', targetAmount: Math.round(cap * 0.15), color: '#38bdf8', emoji: '📚' },
+      { id: 'cat-wants-' + Date.now(), name: 'Nongkrong & Hiburan', targetAmount: Math.round(cap * 0.10), color: '#a78bfa', emoji: '☕' },
+      { id: 'cat-save-' + Date.now(), name: 'Tabungan & Darurat', targetAmount: Math.round(cap * 0.10), color: '#34d399', emoji: '💰' }
+    ];
+  } else if (templateKey === 'simple') {
+    newCategories = [
+      { id: 'cat-main-' + Date.now(), name: 'Operasional Utama', targetAmount: cap, color: '#38bdf8', emoji: '💼' }
+    ];
+  } else {
+    newCategories = [
+      { id: 'cat-gen-' + Date.now(), name: 'Pengeluaran Umum', targetAmount: cap, color: '#a78bfa', emoji: '📁' }
+    ];
+  }
+
+  const newProf = {
+    id: newId,
+    name: name.trim() || 'Pengguna Baru',
+    role: role.trim() || 'Personal',
+    avatar: avatar.trim() || (name.trim().substring(0, 2).toUpperCase() || '👤'),
+    color: color || '#818cf8',
+    capital: cap,
+    cycle: {
+      type: 'monthly',
+      monthlyStartDay: 1,
+      weeklyInterval: 1,
+      weeklyStartDate: todayIso,
+      customIntervalDays: 1,
+      customStartDate: todayIso
+    },
+    categories: newCategories,
+    expenses: [],
+    incomes: [],
+    analysisTab: 'expense',
+    cycleOffset: 0
+  };
+
+  state.profiles.push(newProf);
+  switchProfile(newId);
+  showToast(`Profil baru "${newProf.name}" berhasil dibuat!`);
+}
+
+function updateProfile(profileId, name, role, avatar, color) {
+  const prof = state.profiles.find(p => p.id === profileId);
+  if (!prof) return;
+
+  prof.name = name.trim() || prof.name;
+  prof.role = role.trim() || prof.role;
+  prof.avatar = avatar.trim() || prof.avatar;
+  prof.color = color || prof.color;
+
+  if (state.activeProfileId === profileId) {
+    syncStateToActiveProfile();
+  }
+  saveState();
+  updateUI();
+  showToast(`Profil "${prof.name}" berhasil diperbarui`);
+}
+
+function deleteProfile(profileId) {
+  if (state.profiles.length <= 1) {
+    alert('Tidak bisa menghapus profil karena minimal harus ada 1 profil aktif.');
+    return;
+  }
+  const prof = state.profiles.find(p => p.id === profileId);
+  if (!prof) return;
+
+  if (!confirm(`Hapus profil "${prof.name}"? Semua pos alokasi dan catatan transaksi di profil ini akan dihapus permanen.`)) {
+    return;
+  }
+
+  state.profiles = state.profiles.filter(p => p.id !== profileId);
+  if (state.activeProfileId === profileId) {
+    const fallback = state.profiles[0];
+    syncProfileToState(state, fallback);
+  } else {
+    syncStateToActiveProfile();
+  }
+
+  saveState();
+  closeProfileSwitchModal();
+  updateUI();
+  showToast(`Profil "${prof.name}" telah dihapus`);
+}
+
+function openProfileSwitchModal() {
+  renderProfileSwitchModal();
+  document.getElementById('modalProfileSwitch')?.classList.remove('hidden');
+}
+
+function closeProfileSwitchModal() {
+  document.getElementById('modalProfileSwitch')?.classList.add('hidden');
+}
+
+function renderProfileSwitchModal() {
+  const container = document.getElementById('modalProfileSwitchList');
+  if (!container) return;
+
+  container.innerHTML = state.profiles.map(prof => {
+    const isActive = prof.id === state.activeProfileId;
+    const catCount = (prof.categories || []).length;
+    const txCount = (prof.expenses || []).length + (prof.incomes || []).length;
+    const color = prof.color || '#9d50ff';
+    const bgRgba = hexToRgba(color, 0.18);
+    const borderRgba = hexToRgba(color, 0.45);
+
+    return `
+      <div class="p-3.5 rounded-2xl border ${isActive ? 'border-purple-500 bg-[#241744] shadow-lg shadow-purple-950/40' : 'border-[#2d1f50] bg-[#150d28] hover:bg-[#1f153a]'} transition flex items-center justify-between gap-3 cursor-pointer group" onclick="switchProfile('${prof.id}')">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold shrink-0 transition group-hover:scale-105 shadow-md"
+            style="background-color: ${bgRgba}; border: 1.5px solid ${borderRgba}; color: ${color};">
+            ${escapeHtml(prof.avatar || '👤')}
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <p class="font-bold text-white text-sm truncate">${escapeHtml(prof.name)}</p>
+              ${isActive ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktif</span>` : ''}
+            </div>
+            <p class="text-xs text-[#9f96b5] truncate">${escapeHtml(prof.role || 'Personal')} &bull; <span class="text-purple-300 font-semibold">${formatIDR(prof.capital)}</span></p>
+            <p class="text-[10px] text-[#6f6585] mt-0.5">${catCount} pos alokasi &bull; ${txCount} riwayat transaksi</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+          <button onclick="openProfileEditModal('${prof.id}')" title="Edit Profil" class="p-2 text-[#9f96b5] hover:text-white rounded-xl hover:bg-white/10 transition">
+            <i data-lucide="edit-3" class="w-4 h-4"></i>
+          </button>
+          ${state.profiles.length > 1 ? `
+            <button onclick="deleteProfile('${prof.id}')" title="Hapus Profil" class="p-2 text-rose-400 hover:text-rose-300 rounded-xl hover:bg-rose-500/10 transition">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function openProfileEditModal(profileId) {
+  closeProfileSwitchModal();
+  const modal = document.getElementById('modalProfileEdit');
+  if (!modal) return;
+
+  const titleEl = document.getElementById('modalProfileEditTitle');
+  const editIdInput = document.getElementById('profEditId');
+  const nameInput = document.getElementById('profNameInput');
+  const roleInput = document.getElementById('profRoleInput');
+  const avatarInput = document.getElementById('profAvatarInput');
+  const colorInput = document.getElementById('profColorInput');
+  const extraFields = document.getElementById('profNewExtraFields');
+
+  // Populate color swatches
+  const colorGrid = document.getElementById('profColorSwatches');
+  if (colorGrid) {
+    colorGrid.innerHTML = COLOR_PALETTE.map(c => `
+      <button type="button" onclick="setQuickProfColor('${c}')" class="w-6 h-6 rounded-full border border-white/20 transition hover:scale-110 shadow-sm" style="background-color: ${c};"></button>
+    `).join('');
+  }
+
+  if (profileId) {
+    const prof = state.profiles.find(p => p.id === profileId);
+    if (!prof) return;
+    if (titleEl) titleEl.innerHTML = `<i data-lucide="edit-3" class="w-4 h-4 text-purple-400"></i> Edit Profil: ${escapeHtml(prof.name)}`;
+    if (editIdInput) editIdInput.value = prof.id;
+    if (nameInput) nameInput.value = prof.name;
+    if (roleInput) roleInput.value = prof.role || '';
+    if (avatarInput) avatarInput.value = prof.avatar || '👤';
+    if (colorInput) colorInput.value = prof.color || '#9d50ff';
+    if (extraFields) extraFields.classList.add('hidden');
+    onProfAvatarChanged(prof.avatar || '👤');
+    onProfColorChanged(prof.color || '#9d50ff');
+  } else {
+    if (titleEl) titleEl.innerHTML = `<i data-lucide="user-plus" class="w-4 h-4 text-purple-400"></i> Tambah Profil Baru`;
+    if (editIdInput) editIdInput.value = '';
+    if (nameInput) nameInput.value = '';
+    if (roleInput) roleInput.value = 'Anak Kuliahan';
+    const initialColor = COLOR_PALETTE[state.profiles.length % COLOR_PALETTE.length];
+    if (avatarInput) avatarInput.value = '👤';
+    if (colorInput) colorInput.value = initialColor;
+    if (extraFields) extraFields.classList.remove('hidden');
+    const capInput = document.getElementById('profCapitalInput');
+    if (capInput) capInput.value = '1500000';
+    onProfAvatarChanged('👤');
+    onProfColorChanged(initialColor);
+  }
+
+  modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeProfileEditModal() {
+  document.getElementById('modalProfileEdit')?.classList.add('hidden');
+}
+
+function onProfAvatarChanged(val) {
+  const preview = document.getElementById('profAvatarPreview');
+  if (preview) preview.innerText = val.trim() || '👤';
+}
+
+function onProfColorChanged(color) {
+  const preview = document.getElementById('profAvatarPreview');
+  if (preview) {
+    preview.style.borderColor = color;
+    preview.style.color = color;
+    preview.style.backgroundColor = hexToRgba(color, 0.2);
+  }
+}
+
+function setQuickProfAvatar(emote) {
+  const input = document.getElementById('profAvatarInput');
+  if (input) {
+    input.value = emote;
+    onProfAvatarChanged(emote);
+  }
+}
+
+function setQuickProfColor(color) {
+  const colorInput = document.getElementById('profColorInput');
+  if (colorInput) {
+    colorInput.value = color;
+    onProfColorChanged(color);
+  }
+}
+
+function onProfNameInputChanged(val) {
+  const avatarInput = document.getElementById('profAvatarInput');
+  const editId = document.getElementById('profEditId')?.value;
+  if (!editId && avatarInput && (avatarInput.value === '👤' || avatarInput.value === '')) {
+    const initials = val.trim().split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+    if (initials) {
+      avatarInput.value = initials;
+      onProfAvatarChanged(initials);
+    }
+  }
+}
+
+function saveProfileModal() {
+  const editId = document.getElementById('profEditId')?.value;
+  const name = document.getElementById('profNameInput')?.value.trim();
+  const role = document.getElementById('profRoleInput')?.value.trim();
+  const avatar = document.getElementById('profAvatarInput')?.value.trim();
+  const color = document.getElementById('profColorInput')?.value || '#9d50ff';
+
+  if (!name) {
+    alert('Silakan masukkan nama profil.');
+    return;
+  }
+
+  if (editId) {
+    updateProfile(editId, name, role, avatar, color);
+    closeProfileEditModal();
+  } else {
+    const capital = Number(document.getElementById('profCapitalInput')?.value) || 1500000;
+    const templateKey = document.getElementById('profTemplateSelect')?.value || 'standard';
+    createProfile(name, role, avatar, color, capital, templateKey);
+    closeProfileEditModal();
+  }
+}
+
+function renderProfileElements() {
+  const active = getActiveProfile();
+  const color = active.color || '#9d50ff';
+  const bgRgba = hexToRgba(color, 0.2);
+  const borderRgba = hexToRgba(color, 0.45);
+
+  // Sidebar User Card
+  const sideAvatar = document.getElementById('sideUserAvatar');
+  const sideName = document.getElementById('sideUserName');
+  const sideRole = document.getElementById('sideUserRole');
+  if (sideAvatar) {
+    sideAvatar.innerText = active.avatar || '👤';
+    sideAvatar.style.backgroundColor = bgRgba;
+    sideAvatar.style.borderColor = borderRgba;
+    sideAvatar.style.color = color;
+  }
+  if (sideName) sideName.innerText = active.name;
+  if (sideRole) sideRole.innerText = active.role || 'Personal';
+
+  // Mobile Top Bar
+  const mobAvatar = document.getElementById('mobileUserAvatar');
+  const mobBtn = document.getElementById('mobileProfileBtn');
+  if (mobAvatar) {
+    mobAvatar.innerText = active.avatar || '👤';
+  }
+  if (mobBtn) {
+    mobBtn.style.backgroundColor = bgRgba;
+    mobBtn.style.borderColor = borderRgba;
+    mobBtn.style.color = color;
+  }
+
+  // Desktop Header Badge
+  const deskAvatar = document.getElementById('desktopUserAvatar');
+  const deskName = document.getElementById('desktopUserName');
+  if (deskAvatar) {
+    deskAvatar.innerText = active.avatar || '👤';
+    deskAvatar.style.backgroundColor = bgRgba;
+    deskAvatar.style.borderColor = borderRgba;
+    deskAvatar.style.color = color;
+  }
+  if (deskName) deskName.innerText = active.name;
+
+  // Render in Settings Tab
+  renderProfileManager();
+}
+
+function renderProfileManager() {
+  const container = document.getElementById('settingsProfilesList');
+  if (!container) return;
+
+  container.innerHTML = state.profiles.map(prof => {
+    const isActive = prof.id === state.activeProfileId;
+    const catCount = (prof.categories || []).length;
+    const txCount = (prof.expenses || []).length + (prof.incomes || []).length;
+    const color = prof.color || '#9d50ff';
+    const bgRgba = hexToRgba(color, 0.15);
+    const borderRgba = hexToRgba(color, 0.4);
+
+    return `
+      <div class="p-4 rounded-xl border ${isActive ? 'border-purple-500/80 bg-[#1e1438] shadow-lg shadow-purple-900/20' : 'border-[#2d1f50] bg-[#150d28] hover:bg-[#1b1232]'} transition flex flex-col justify-between gap-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold shrink-0 shadow-md"
+              style="background-color: ${bgRgba}; border: 1.5px solid ${borderRgba}; color: ${color};">
+              ${escapeHtml(prof.avatar || '👤')}
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <h4 class="font-bold text-white text-sm truncate">${escapeHtml(prof.name)}</h4>
+                ${isActive ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktif</span>` : ''}
+              </div>
+              <p class="text-xs text-[#9f96b5] truncate">${escapeHtml(prof.role || 'Personal')}</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <button onclick="openProfileEditModal('${prof.id}')" title="Edit Profil" class="p-1.5 text-[#9f96b5] hover:text-white rounded-lg hover:bg-white/5 transition">
+              <i data-lucide="edit-3" class="w-4 h-4"></i>
+            </button>
+            ${state.profiles.length > 1 ? `
+              <button onclick="deleteProfile('${prof.id}')" title="Hapus Profil" class="p-1.5 text-rose-400 hover:text-rose-300 rounded-lg hover:bg-rose-500/10 transition">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-[#2d1f50]/60 flex items-center justify-between text-xs">
+          <div>
+            <span class="text-[#9f96b5] text-[11px]">Total Modal: </span>
+            <span class="font-bold text-purple-300">${formatIDR(prof.capital)}</span>
+          </div>
+          <div class="text-[11px] text-[#6f6585]">
+            ${catCount} pos &bull; ${txCount} tx
+          </div>
+        </div>
+
+        ${!isActive ? `
+          <button onclick="switchProfile('${prof.id}')" class="w-full mt-1 py-1.5 px-3 text-xs font-semibold rounded-lg bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/30 hover:border-purple-500 transition flex items-center justify-center gap-1.5">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i> Gunakan Profil Ini
+          </button>
+        ` : `
+          <div class="w-full mt-1 py-1 px-3 text-[11px] font-semibold text-center text-emerald-400 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+            Sedang Digunakan
+          </div>
+        `}
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function showToast(message) {
+  let toast = document.getElementById ? document.getElementById('appToast') : null;
+  if (!toast && document.createElement) {
+    toast = document.createElement('div');
+    toast.id = 'appToast';
+    toast.className = 'fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-purple-600 text-white text-xs font-semibold shadow-2xl shadow-purple-600/50 border border-purple-400/40 transform transition-all duration-300 translate-y-12 opacity-0 flex items-center gap-2';
+    if (document.body) {
+      document.body.appendChild(toast);
+    }
+  }
+  if (!toast) return;
+  toast.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> <span>${escapeHtml(message)}</span>`;
+  if (window.lucide) lucide.createIcons();
+
+  if (toast.classList) {
+    toast.classList.remove('translate-y-12', 'opacity-0');
+    toast.classList.add('translate-y-0', 'opacity-100');
+  }
+
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => {
+    if (toast.classList) {
+      toast.classList.remove('translate-y-0', 'opacity-100');
+      toast.classList.add('translate-y-12', 'opacity-0');
+    }
+  }, 2500);
 }
 
 // ==========================================
