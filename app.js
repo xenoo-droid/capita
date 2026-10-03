@@ -416,7 +416,7 @@ function getCategorySpentMap(expensesList) {
   return map;
 }
 
-// Inline Chart.js Plugin to draw clean percentage badges inside arcs
+// Inline Chart.js Plugin to draw clean Emote + percentage badges inside arcs
 const doughnutPercentagePlugin = {
   id: 'doughnutPercentagePlugin',
   afterDatasetsDraw(chart) {
@@ -431,7 +431,7 @@ const doughnutPercentagePlugin = {
     meta.data.forEach((element, index) => {
       const value = dataset.data[index];
       const pct = Math.round((value / total) * 100);
-      if (pct < 5) return; // Skip tiny slices to avoid crowding
+      if (pct < 4) return; // Skip tiny slices to avoid crowding
 
       const { startAngle, endAngle, innerRadius, outerRadius } = element;
       const midAngle = (startAngle + endAngle) / 2;
@@ -440,14 +440,33 @@ const doughnutPercentagePlugin = {
       const x = element.x + Math.cos(midAngle) * midRadius;
       const y = element.y + Math.sin(midAngle) * midRadius;
 
+      // Extract emoji from dataset labels (e.g. "🏠 Kosan")
+      const label = data.labels[index] || '';
+      const emojiMatch = label.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u);
+      const emoji = emojiMatch ? emojiMatch[0] : '';
+
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-      ctx.shadowBlur = 4;
-      ctx.fillText(`${pct}%`, x, y);
+
+      if (emoji && pct >= 7) {
+        // Draw Emote Icon
+        ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI Emoji", sans-serif';
+        ctx.fillText(emoji, x, y - 7);
+        // Draw Percentage Text
+        ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+        ctx.fillText(`${pct}%`, x, y + 8);
+      } else {
+        ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+        ctx.fillText(`${pct}%`, x, y);
+      }
+
       ctx.restore();
     });
   }
