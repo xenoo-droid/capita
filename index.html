@@ -106,6 +106,9 @@
             </div>
           </button>
           <div class="flex items-center gap-0.5 shrink-0">
+            <button onclick="lockCurrentProfile()" id="sideLockBtn" title="Kunci Profil Ini" class="p-1.5 text-[#9f96b5] hover:text-rose-400 rounded-lg hover:bg-white/5 transition hidden">
+              <i data-lucide="lock" class="w-4 h-4"></i>
+            </button>
             <button onclick="openProfileSwitchModal()" title="Ganti Profil" class="p-1.5 text-[#9f96b5] hover:text-purple-300 rounded-lg hover:bg-white/5 transition">
               <i data-lucide="users" class="w-4 h-4"></i>
             </button>
@@ -143,6 +146,9 @@
         <span id="mobileCycleBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
           Bulanan
         </span>
+        <button onclick="lockCurrentProfile()" id="mobileLockBtn" title="Kunci Profil Ini" class="w-8 h-8 rounded-full bg-[#1b1232] border border-[#2d1f50] text-[#9f96b5] hover:text-rose-400 flex items-center justify-center transition hidden">
+          <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+        </button>
         <button onclick="openProfileSwitchModal()" id="mobileProfileBtn" title="Ganti Profil Pengguna" class="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-xs font-bold text-purple-300 transition active:scale-95 shadow-sm">
           <span id="mobileUserAvatar">HR</span>
         </button>
@@ -168,6 +174,11 @@
           </div>
           <span id="desktopUserName" class="max-w-[130px] truncate font-semibold">Haryo Seno</span>
           <i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-[#9f96b5]"></i>
+        </button>
+
+        <!-- Lock Profile Button -->
+        <button onclick="lockCurrentProfile()" id="headerLockBtn" title="Kunci Profil Ini Sekarang" class="p-2 rounded-xl text-[#9f96b5] hover:text-rose-400 hover:bg-rose-500/10 bg-[#1b1232] border border-[#2d1f50] transition hidden">
+          <i data-lucide="lock" class="w-4 h-4"></i>
         </button>
 
         <button onclick="switchTab('expenses')" class="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center gap-1.5">
@@ -1028,6 +1039,74 @@
             class="w-full px-3 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white">
         </div>
 
+        <!-- Keamanan Password / PIN Profil -->
+        <div class="p-3.5 rounded-2xl bg-[#150d28] border border-purple-500/30 space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-white flex items-center gap-1.5">
+              <i data-lucide="shield" class="w-4 h-4 text-purple-400"></i> Keamanan Password / PIN
+            </label>
+            <span id="profPassStatusBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              Tanpa Password
+            </span>
+          </div>
+
+          <!-- Bagian jika profil baru atau belum punya password -->
+          <div id="profSetPassSection" class="space-y-2.5">
+            <div>
+              <label class="block text-[11px] text-[#9f96b5] mb-1">Password / PIN (Kosongkan jika tanpa password):</label>
+              <div class="relative">
+                <input type="password" id="profPassInput" placeholder="Contoh: 1234 atau kata sandi"
+                  class="w-full px-3 py-1.5 pr-10 text-xs bg-[#1b1232] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider">
+                <button type="button" onclick="togglePasswordVisibility('profPassInput', this)" class="absolute right-2.5 top-2 text-[#9f96b5] hover:text-white transition">
+                  <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] text-[#9f96b5] mb-1">Konfirmasi Password / PIN:</label>
+              <div class="relative">
+                <input type="password" id="profPassConfirmInput" placeholder="Ulangi password di atas"
+                  class="w-full px-3 py-1.5 pr-10 text-xs bg-[#1b1232] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider">
+                <button type="button" onclick="togglePasswordVisibility('profPassConfirmInput', this)" class="absolute right-2.5 top-2 text-[#9f96b5] hover:text-white transition">
+                  <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bagian jika profil sudah berpassword (Edit Mode) -->
+          <div id="profExistingPassSection" class="space-y-2.5 hidden">
+            <div>
+              <label class="block text-[11px] text-purple-300 font-semibold mb-1">Password Saat Ini (Wajib verifikasi):</label>
+              <div class="relative">
+                <input type="password" id="profCurrentPassInput" placeholder="Masukkan password lama"
+                  class="w-full px-3 py-1.5 pr-10 text-xs bg-[#1b1232] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider">
+                <button type="button" onclick="togglePasswordVisibility('profCurrentPassInput', this)" class="absolute right-2.5 top-2 text-[#9f96b5] hover:text-white transition">
+                  <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] text-[#9f96b5] mb-1">Ganti Password Baru (Opsional):</label>
+              <div class="relative">
+                <input type="password" id="profNewPassInput" placeholder="Kosongkan jika tidak ingin ganti"
+                  class="w-full px-3 py-1.5 pr-10 text-xs bg-[#1b1232] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider">
+                <button type="button" onclick="togglePasswordVisibility('profNewPassInput', this)" class="absolute right-2.5 top-2 text-[#9f96b5] hover:text-white transition">
+                  <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+            <label class="flex items-center gap-2 pt-1 text-xs text-rose-400 cursor-pointer">
+              <input type="checkbox" id="profRemovePassCheck" class="rounded text-rose-600 focus:ring-rose-500 bg-[#1b1232] border-[#2d1f50]">
+              <span>Hapus Password (Jadikan profil bebas akses)</span>
+            </label>
+          </div>
+
+          <p class="text-[10px] text-[#9f96b5] leading-relaxed">
+            🔒 Jika password diaktifkan, profil ini akan terkunci dan membutuhkan sandi saat beralih akun, membuka aplikasi, atau mengedit data.
+          </p>
+        </div>
+
         <!-- Only visible when creating a NEW profile -->
         <div id="profNewExtraFields" class="space-y-4 pt-2 border-t border-[#2d1f50]/60">
           <div>
@@ -1058,6 +1137,97 @@
           Simpan Profil
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- LOCK SCREEN OVERLAY -->
+  <div id="lockScreenOverlay" class="fixed inset-0 z-50 bg-[#0e081c]/95 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="alloc-card max-w-sm w-full p-6 text-center shadow-2xl border border-purple-500/40 bg-[#1b1232] space-y-5">
+      <div class="relative inline-block mx-auto">
+        <div id="lockScreenAvatar" class="w-20 h-20 rounded-3xl mx-auto flex items-center justify-center text-3xl font-bold bg-purple-500/20 border-2 border-purple-500/50 text-purple-300 shadow-xl shadow-purple-500/20">
+          HR
+        </div>
+        <div class="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-rose-500 flex items-center justify-center text-white text-xs shadow-lg border-2 border-[#1b1232]">
+          <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+        </div>
+      </div>
+
+      <div>
+        <h3 id="lockScreenName" class="text-lg font-bold text-white">Haryo Seno</h3>
+        <p class="text-xs text-[#9f96b5] mt-0.5">Profil ini dilindungi password / PIN</p>
+      </div>
+
+      <form onsubmit="event.preventDefault(); submitLockScreenUnlock();" class="space-y-3">
+        <div class="relative">
+          <input type="password" id="lockScreenPasswordInput" placeholder="Masukkan Password / PIN"
+            class="w-full px-4 py-2.5 text-center text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-widest font-bold"
+            autocomplete="current-password">
+          <button type="button" onclick="togglePasswordVisibility('lockScreenPasswordInput', this)" class="absolute right-3 top-2.5 text-[#9f96b5] hover:text-white transition">
+            <i data-lucide="eye" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <p id="lockScreenError" class="text-xs text-rose-400 font-medium hidden flex items-center justify-center gap-1">
+          <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> Password salah!
+        </p>
+
+        <button type="submit" class="w-full py-2.5 px-4 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2">
+          <i data-lucide="unlock" class="w-4 h-4"></i> Buka Akses Profil
+        </button>
+      </form>
+
+      <div class="pt-3 border-t border-[#2d1f50]/60">
+        <button type="button" onclick="openProfileSwitchModalFromLock()" class="text-xs text-[#9f96b5] hover:text-purple-300 transition flex items-center justify-center gap-1.5 mx-auto">
+          <i data-lucide="users" class="w-3.5 h-3.5"></i> Masuk dengan Profil Lain
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VERIFY PASSWORD PROMPT -->
+  <div id="modalPasswordPrompt" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="alloc-card max-w-sm w-full p-5 shadow-2xl border border-[#2d1f50] bg-[#1b1232] space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-purple-400"></i> Verifikasi Password
+        </h3>
+        <button onclick="closePasswordPromptModal()" class="text-[#9f96b5] hover:text-white transition p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-3 p-3 rounded-xl bg-[#150d28] border border-[#2d1f50]">
+        <div id="promptTargetAvatar" class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0">
+          HR
+        </div>
+        <div class="min-w-0">
+          <p id="promptTargetName" class="font-bold text-white text-sm truncate">Haryo Seno</p>
+          <p id="promptTargetAction" class="text-xs text-[#9f96b5]">Masukkan password untuk mengakses</p>
+        </div>
+      </div>
+
+      <form onsubmit="event.preventDefault(); submitPasswordPrompt();" class="space-y-3">
+        <div class="relative">
+          <input type="password" id="promptPasswordInput" placeholder="Password / PIN"
+            class="w-full px-4 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider font-bold">
+          <button type="button" onclick="togglePasswordVisibility('promptPasswordInput', this)" class="absolute right-3 top-2.5 text-[#9f96b5] hover:text-white transition">
+            <i data-lucide="eye" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <p id="promptPasswordError" class="text-xs text-rose-400 font-medium hidden flex items-center gap-1">
+          <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> Password salah!
+        </p>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-[#2d1f50]">
+          <button type="button" onclick="closePasswordPromptModal()" class="px-3.5 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition">
+            Batal
+          </button>
+          <button type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30 transition flex items-center gap-1.5">
+            <i data-lucide="unlock" class="w-3.5 h-3.5"></i> Konfirmasi
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -1097,6 +1267,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.4"></script>
+  <script src="app.js?v=2.5"></script>
 </body>
 </html>

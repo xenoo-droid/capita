@@ -35,6 +35,7 @@ const DEFAULT_PROFILE = {
   role: 'Anak Kuliahan',
   avatar: 'HR',
   color: '#9d50ff',
+  passwordHash: null, // null | string SHA-256 hash
   capital: 1500000,
   cycle: {
     type: 'monthly', // 'monthly' | 'weekly' | 'custom_days'
@@ -150,6 +151,7 @@ function normalizeProfile(prof, idx = 0) {
     prof.avatar = prof.name.substring(0, 2).toUpperCase() || '👤';
   }
   if (!prof.color) prof.color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
+  if (prof.passwordHash === undefined) prof.passwordHash = null;
   if (prof.capital === undefined || isNaN(Number(prof.capital))) prof.capital = 1500000;
   if (!prof.expenses || !Array.isArray(prof.expenses)) prof.expenses = [];
   if (!prof.incomes || !Array.isArray(prof.incomes)) prof.incomes = [];
@@ -202,6 +204,7 @@ function loadStateFromObject(parsed) {
       role: 'Anak Kuliahan',
       avatar: 'HR',
       color: '#9d50ff',
+      passwordHash: parsed.passwordHash || null,
       capital: parsed.capital !== undefined ? parsed.capital : 1500000,
       cycle: parsed.cycle || {
         type: 'monthly',
@@ -1789,10 +1792,230 @@ function confirmResetData() {
 }
 
 // ==========================================
-// MULTI-PROFILE & USER MANAGEMENT
+// MULTI-PROFILE, SECURITY & PASSWORD MANAGEMENT
 // ==========================================
 
+// Hash password using SHA-256 (Web Crypto) with fast pure-JS FNV-1a fallback
+async function hashPassword(str) {
+  if (!str) return '';
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode('allocata_secure_salt_' + str);
+      const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+      console.warn('Crypto subtle fallback:', e);
+    }
+  }
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return 'h_' + (h >>> 0).toString(16);
+}
+
+function isProfileLocked(prof) {
+  if (!prof || !prof.passwordHash) return false;
+  try {
+    return sessionStorage.getItem('unlocked_' + prof.id) !== 'true';
+  } catch (e) {
+    return true;
+  }
+}
+
+function unlockProfileSession(profileId) {
+  try {
+    sessionStorage.setItem('unlocked_' + profileId, 'true');
+  } catch (e) {}
+}
+
+function lockProfileSession(profileId) {
+  try {
+    sessionStorage.removeItem('unlocked_' + profileId);
+  } catch (e) {}
+}
+
+function checkLockScreenState() {
+  const active = getActiveProfile();
+  const overlay = document.getElementById('lockScreenOverlay');
+  if (!overlay) return;
+
+  if (isProfileLocked(active)) {
+    overlay.classList.remove('hidden');
+    const avatarEl = document.getElementById('lockScreenAvatar');
+    const nameEl = document.getElementById('lockScreenName');
+    const inputEl = document.getElementById('lockScreenPasswordInput');
+    const errEl = document.getElementById('lockScreenError');
+
+    if (avatarEl) {
+      avatarEl.innerText = active.avatar || '👤';
+      const color = active.color || '#9d50ff';
+      avatarEl.style.backgroundColor = hexToRgba(color, 0.2);
+      avatarEl.style.borderColor = hexToRgba(color, 0.5);
+      avatarEl.style.color = color;
+    }
+    if (nameEl) nameEl.innerText = active.name;
+    if (errEl) errEl.classList.add('hidden');
+    if (inputEl) {
+      inputEl.value = '';
+      setTimeout(() => inputEl.focus(), 150);
+    }
+  } else {
+    overlay.classList.add('hidden');
+  }
+}
+
+async function submitLockScreenUnlock() {
+  const active = getActiveProfile();
+  const inputEl = document.getElementById('lockScreenPasswordInput');
+  const errEl = document.getElementById('lockScreenError');
+  const pass = inputEl?.value || '';
+
+  const inputHash = await hashPassword(pass);
+  if (inputHash === active.passwordHash) {
+    unlockProfileSession(active.id);
+    if (errEl) errEl.classList.add('hidden');
+    document.getElementById('lockScreenOverlay')?.classList.add('hidden');
+    updateUI();
+    showToast(`Profil "${active.name}" berhasil dibuka`);
+  } else {
+    if (errEl) {
+      errEl.classList.remove('hidden');
+      errEl.innerText = 'Password salah, silakan coba lagi!';
+    }
+    if (inputEl) {
+      inputEl.classList.add('ring-2', 'ring-rose-500');
+      setTimeout(() => inputEl.classList.remove('ring-2', 'ring-rose-500'), 1000);
+      inputEl.value = '';
+      inputEl.focus();
+    }
+  }
+}
+
+function lockCurrentProfile() {
+  const active = getActiveProfile();
+  if (!active.passwordHash) {
+    alert(`Profil "${active.name}" belum memiliki password.\nSilakan atur password di menu Edit Profil terlebih dahulu.`);
+    return;
+  }
+  lockProfileSession(active.id);
+  checkLockScreenState();
+  showToast(`Profil "${active.name}" berhasil dikunci`);
+}
+
+function openProfileSwitchModalFromLock() {
+  openProfileSwitchModal();
+}
+
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  if (btn) {
+    btn.innerHTML = isPass ? '<i data-lucide="eye-off" class="w-4 h-4"></i>' : '<i data-lucide="eye" class="w-4 h-4"></i>';
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+// Verification Modal for Switching / Editing / Deleting locked profiles
+let pendingAuthAction = null; // { type: 'switch'|'edit'|'delete', profileId: '...' }
+
+function openPasswordPromptModal(action) {
+  pendingAuthAction = action;
+  const targetProf = state.profiles.find(p => p.id === action.profileId);
+  if (!targetProf) return;
+
+  const modal = document.getElementById('modalPasswordPrompt');
+  const avatarEl = document.getElementById('promptTargetAvatar');
+  const nameEl = document.getElementById('promptTargetName');
+  const actionEl = document.getElementById('promptTargetAction');
+  const inputEl = document.getElementById('promptPasswordInput');
+  const errEl = document.getElementById('promptPasswordError');
+
+  if (avatarEl) {
+    avatarEl.innerText = targetProf.avatar || '👤';
+    const color = targetProf.color || '#9d50ff';
+    avatarEl.style.backgroundColor = hexToRgba(color, 0.2);
+    avatarEl.style.borderColor = hexToRgba(color, 0.5);
+    avatarEl.style.color = color;
+  }
+  if (nameEl) nameEl.innerText = targetProf.name;
+  if (actionEl) {
+    if (action.type === 'switch') actionEl.innerText = 'Masukkan password untuk beralih ke profil ini';
+    else if (action.type === 'edit') actionEl.innerText = 'Masukkan password untuk mengedit profil ini';
+    else if (action.type === 'delete') actionEl.innerText = 'Masukkan password untuk menghapus profil ini';
+  }
+  if (errEl) errEl.classList.add('hidden');
+  if (inputEl) {
+    inputEl.value = '';
+    setTimeout(() => inputEl.focus(), 150);
+  }
+
+  modal?.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closePasswordPromptModal() {
+  pendingAuthAction = null;
+  document.getElementById('modalPasswordPrompt')?.classList.add('hidden');
+}
+
+async function submitPasswordPrompt() {
+  if (!pendingAuthAction) return;
+  const targetProf = state.profiles.find(p => p.id === pendingAuthAction.profileId);
+  if (!targetProf) {
+    closePasswordPromptModal();
+    return;
+  }
+
+  const inputEl = document.getElementById('promptPasswordInput');
+  const errEl = document.getElementById('promptPasswordError');
+  const pass = inputEl?.value || '';
+
+  const inputHash = await hashPassword(pass);
+  if (inputHash === targetProf.passwordHash) {
+    unlockProfileSession(targetProf.id);
+    const action = { ...pendingAuthAction };
+    closePasswordPromptModal();
+
+    if (action.type === 'switch') {
+      doSwitchProfile(action.profileId);
+    } else if (action.type === 'edit') {
+      openProfileEditModal(action.profileId, true);
+    } else if (action.type === 'delete') {
+      doDeleteProfile(action.profileId);
+    }
+  } else {
+    if (errEl) {
+      errEl.classList.remove('hidden');
+      errEl.innerText = 'Password salah, silakan coba lagi!';
+    }
+    if (inputEl) {
+      inputEl.classList.add('ring-2', 'ring-rose-500');
+      setTimeout(() => inputEl.classList.remove('ring-2', 'ring-rose-500'), 1000);
+      inputEl.value = '';
+      inputEl.focus();
+    }
+  }
+}
+
 function switchProfile(profileId) {
+  const target = state.profiles.find(p => p.id === profileId);
+  if (!target) return;
+
+  if (isProfileLocked(target)) {
+    closeProfileSwitchModal();
+    openPasswordPromptModal({ type: 'switch', profileId });
+    return;
+  }
+
+  doSwitchProfile(profileId);
+}
+
+function doSwitchProfile(profileId) {
   syncStateToActiveProfile();
   const target = state.profiles.find(p => p.id === profileId);
   if (!target) return;
@@ -1801,10 +2024,11 @@ function switchProfile(profileId) {
   saveState();
   closeProfileSwitchModal();
   updateUI();
+  checkLockScreenState();
   showToast(`Beralih ke profil "${target.name}"`);
 }
 
-function createProfile(name, role, avatar, color, initialCapital, templateKey) {
+function createProfile(name, role, avatar, color, initialCapital, templateKey, passwordHash = null) {
   syncStateToActiveProfile();
   const newId = 'prof-' + Date.now();
   const cap = Number(initialCapital) || 1500000;
@@ -1835,6 +2059,7 @@ function createProfile(name, role, avatar, color, initialCapital, templateKey) {
     avatar: avatar.trim() || (name.trim().substring(0, 2).toUpperCase() || '👤'),
     color: color || '#818cf8',
     capital: cap,
+    passwordHash: passwordHash || null,
     cycle: {
       type: 'monthly',
       monthlyStartDay: 1,
@@ -1851,11 +2076,12 @@ function createProfile(name, role, avatar, color, initialCapital, templateKey) {
   };
 
   state.profiles.push(newProf);
-  switchProfile(newId);
+  unlockProfileSession(newId);
+  doSwitchProfile(newId);
   showToast(`Profil baru "${newProf.name}" berhasil dibuat!`);
 }
 
-function updateProfile(profileId, name, role, avatar, color) {
+function updateProfile(profileId, name, role, avatar, color, passwordHash) {
   const prof = state.profiles.find(p => p.id === profileId);
   if (!prof) return;
 
@@ -1863,12 +2089,14 @@ function updateProfile(profileId, name, role, avatar, color) {
   prof.role = role.trim() || prof.role;
   prof.avatar = avatar.trim() || prof.avatar;
   prof.color = color || prof.color;
+  prof.passwordHash = passwordHash !== undefined ? passwordHash : prof.passwordHash;
 
   if (state.activeProfileId === profileId) {
     syncStateToActiveProfile();
   }
   saveState();
   updateUI();
+  checkLockScreenState();
   showToast(`Profil "${prof.name}" berhasil diperbarui`);
 }
 
@@ -1880,11 +2108,26 @@ function deleteProfile(profileId) {
   const prof = state.profiles.find(p => p.id === profileId);
   if (!prof) return;
 
+  if (isProfileLocked(prof)) {
+    closeProfileSwitchModal();
+    openPasswordPromptModal({ type: 'delete', profileId });
+    return;
+  }
+
+  doDeleteProfile(profileId);
+}
+
+function doDeleteProfile(profileId) {
+  const prof = state.profiles.find(p => p.id === profileId);
+  if (!prof) return;
+
   if (!confirm(`Hapus profil "${prof.name}"? Semua pos alokasi dan catatan transaksi di profil ini akan dihapus permanen.`)) {
     return;
   }
 
   state.profiles = state.profiles.filter(p => p.id !== profileId);
+  lockProfileSession(profileId);
+
   if (state.activeProfileId === profileId) {
     const fallback = state.profiles[0];
     syncProfileToState(state, fallback);
@@ -1895,6 +2138,7 @@ function deleteProfile(profileId) {
   saveState();
   closeProfileSwitchModal();
   updateUI();
+  checkLockScreenState();
   showToast(`Profil "${prof.name}" telah dihapus`);
 }
 
@@ -1918,18 +2162,25 @@ function renderProfileSwitchModal() {
     const color = prof.color || '#9d50ff';
     const bgRgba = hexToRgba(color, 0.18);
     const borderRgba = hexToRgba(color, 0.45);
+    const isLocked = isProfileLocked(prof);
+
+    const passBadge = prof.passwordHash
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1 shrink-0"><i data-lucide="lock" class="w-3 h-3 text-rose-400"></i> ${isLocked ? 'Terkunci' : 'Terbuka'}</span>`
+      : `<span class="text-[10px] px-1.5 py-0.5 rounded-full text-[#6f6585] border border-[#2d1f50] flex items-center gap-1 shrink-0"><i data-lucide="unlock" class="w-3 h-3"></i> Bebas</span>`;
 
     return `
       <div class="p-3.5 rounded-2xl border ${isActive ? 'border-purple-500 bg-[#241744] shadow-lg shadow-purple-950/40' : 'border-[#2d1f50] bg-[#150d28] hover:bg-[#1f153a]'} transition flex items-center justify-between gap-3 cursor-pointer group" onclick="switchProfile('${prof.id}')">
         <div class="flex items-center gap-3 min-w-0">
-          <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold shrink-0 transition group-hover:scale-105 shadow-md"
+          <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold shrink-0 transition group-hover:scale-105 shadow-md relative"
             style="background-color: ${bgRgba}; border: 1.5px solid ${borderRgba}; color: ${color};">
             ${escapeHtml(prof.avatar || '👤')}
+            ${prof.passwordHash ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px]"><i data-lucide="lock" class="w-2.5 h-2.5"></i></span>` : ''}
           </div>
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <p class="font-bold text-white text-sm truncate">${escapeHtml(prof.name)}</p>
               ${isActive ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktif</span>` : ''}
+              ${passBadge}
             </div>
             <p class="text-xs text-[#9f96b5] truncate">${escapeHtml(prof.role || 'Personal')} &bull; <span class="text-purple-300 font-semibold">${formatIDR(prof.capital)}</span></p>
             <p class="text-[10px] text-[#6f6585] mt-0.5">${catCount} pos alokasi &bull; ${txCount} riwayat transaksi</p>
@@ -1953,7 +2204,7 @@ function renderProfileSwitchModal() {
   if (window.lucide) lucide.createIcons();
 }
 
-function openProfileEditModal(profileId) {
+function openProfileEditModal(profileId, isVerified = false) {
   closeProfileSwitchModal();
   const modal = document.getElementById('modalProfileEdit');
   if (!modal) return;
@@ -1966,6 +2217,16 @@ function openProfileEditModal(profileId) {
   const colorInput = document.getElementById('profColorInput');
   const extraFields = document.getElementById('profNewExtraFields');
 
+  // Password sections
+  const statusBadge = document.getElementById('profPassStatusBadge');
+  const setPassSection = document.getElementById('profSetPassSection');
+  const existingPassSection = document.getElementById('profExistingPassSection');
+  const currentPassInput = document.getElementById('profCurrentPassInput');
+  const newPassInput = document.getElementById('profNewPassInput');
+  const removePassCheck = document.getElementById('profRemovePassCheck');
+  const passInput = document.getElementById('profPassInput');
+  const passConfirmInput = document.getElementById('profPassConfirmInput');
+
   // Populate color swatches
   const colorGrid = document.getElementById('profColorSwatches');
   if (colorGrid) {
@@ -1977,6 +2238,12 @@ function openProfileEditModal(profileId) {
   if (profileId) {
     const prof = state.profiles.find(p => p.id === profileId);
     if (!prof) return;
+
+    if (!isVerified && isProfileLocked(prof)) {
+      openPasswordPromptModal({ type: 'edit', profileId });
+      return;
+    }
+
     if (titleEl) titleEl.innerHTML = `<i data-lucide="edit-3" class="w-4 h-4 text-purple-400"></i> Edit Profil: ${escapeHtml(prof.name)}`;
     if (editIdInput) editIdInput.value = prof.id;
     if (nameInput) nameInput.value = prof.name;
@@ -1984,6 +2251,28 @@ function openProfileEditModal(profileId) {
     if (avatarInput) avatarInput.value = prof.avatar || '👤';
     if (colorInput) colorInput.value = prof.color || '#9d50ff';
     if (extraFields) extraFields.classList.add('hidden');
+
+    if (prof.passwordHash) {
+      if (statusBadge) {
+        statusBadge.innerHTML = '<i data-lucide="lock" class="w-3 h-3 text-rose-400 inline"></i> Terkunci (Berpassword)';
+        statusBadge.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1';
+      }
+      if (setPassSection) setPassSection.classList.add('hidden');
+      if (existingPassSection) existingPassSection.classList.remove('hidden');
+      if (currentPassInput) currentPassInput.value = '';
+      if (newPassInput) newPassInput.value = '';
+      if (removePassCheck) removePassCheck.checked = false;
+    } else {
+      if (statusBadge) {
+        statusBadge.innerText = 'Tanpa Password';
+        statusBadge.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+      }
+      if (setPassSection) setPassSection.classList.remove('hidden');
+      if (existingPassSection) existingPassSection.classList.add('hidden');
+      if (passInput) passInput.value = '';
+      if (passConfirmInput) passConfirmInput.value = '';
+    }
+
     onProfAvatarChanged(prof.avatar || '👤');
     onProfColorChanged(prof.color || '#9d50ff');
   } else {
@@ -1997,6 +2286,16 @@ function openProfileEditModal(profileId) {
     if (extraFields) extraFields.classList.remove('hidden');
     const capInput = document.getElementById('profCapitalInput');
     if (capInput) capInput.value = '1500000';
+
+    if (statusBadge) {
+      statusBadge.innerText = 'Opsional';
+      statusBadge.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30';
+    }
+    if (setPassSection) setPassSection.classList.remove('hidden');
+    if (existingPassSection) existingPassSection.classList.add('hidden');
+    if (passInput) passInput.value = '';
+    if (passConfirmInput) passConfirmInput.value = '';
+
     onProfAvatarChanged('👤');
     onProfColorChanged(initialColor);
   }
@@ -2051,7 +2350,7 @@ function onProfNameInputChanged(val) {
   }
 }
 
-function saveProfileModal() {
+async function saveProfileModal() {
   const editId = document.getElementById('profEditId')?.value;
   const name = document.getElementById('profNameInput')?.value.trim();
   const role = document.getElementById('profRoleInput')?.value.trim();
@@ -2064,12 +2363,62 @@ function saveProfileModal() {
   }
 
   if (editId) {
-    updateProfile(editId, name, role, avatar, color);
+    const prof = state.profiles.find(p => p.id === editId);
+    if (!prof) return;
+
+    let updatedHash = prof.passwordHash;
+
+    if (prof.passwordHash) {
+      const currentPass = document.getElementById('profCurrentPassInput')?.value || '';
+      const currentHash = await hashPassword(currentPass);
+      if (currentHash !== prof.passwordHash) {
+        alert('Password saat ini salah! Harap masukkan password yang benar untuk mengubah profil ini.');
+        return;
+      }
+
+      const removeCheck = document.getElementById('profRemovePassCheck')?.checked;
+      if (removeCheck) {
+        updatedHash = null;
+        lockProfileSession(prof.id);
+      } else {
+        const newPass = document.getElementById('profNewPassInput')?.value || '';
+        if (newPass.trim()) {
+          updatedHash = await hashPassword(newPass.trim());
+          unlockProfileSession(prof.id);
+        }
+      }
+    } else {
+      const pass = document.getElementById('profPassInput')?.value || '';
+      const confirmPass = document.getElementById('profPassConfirmInput')?.value || '';
+      if (pass.trim()) {
+        if (pass !== confirmPass) {
+          alert('Konfirmasi password tidak cocok! Harap ketik ulang password.');
+          return;
+        }
+        updatedHash = await hashPassword(pass.trim());
+        unlockProfileSession(prof.id);
+      }
+    }
+
+    updateProfile(editId, name, role, avatar, color, updatedHash);
     closeProfileEditModal();
   } else {
+    // New profile
     const capital = Number(document.getElementById('profCapitalInput')?.value) || 1500000;
     const templateKey = document.getElementById('profTemplateSelect')?.value || 'standard';
-    createProfile(name, role, avatar, color, capital, templateKey);
+    const pass = document.getElementById('profPassInput')?.value || '';
+    const confirmPass = document.getElementById('profPassConfirmInput')?.value || '';
+
+    let passwordHash = null;
+    if (pass.trim()) {
+      if (pass !== confirmPass) {
+        alert('Konfirmasi password tidak cocok! Harap ketik ulang password.');
+        return;
+      }
+      passwordHash = await hashPassword(pass.trim());
+    }
+
+    createProfile(name, role, avatar, color, capital, templateKey, passwordHash);
     closeProfileEditModal();
   }
 }
@@ -2116,6 +2465,18 @@ function renderProfileElements() {
   }
   if (deskName) deskName.innerText = active.name;
 
+  // Lock buttons: show if active profile has password set
+  const hasPass = Boolean(active.passwordHash);
+  const sideLockBtn = document.getElementById('sideLockBtn');
+  const headerLockBtn = document.getElementById('headerLockBtn');
+  const mobileLockBtn = document.getElementById('mobileLockBtn');
+  [sideLockBtn, headerLockBtn, mobileLockBtn].forEach(btn => {
+    if (btn) {
+      if (hasPass) btn.classList.remove('hidden');
+      else btn.classList.add('hidden');
+    }
+  });
+
   // Render in Settings Tab
   renderProfileManager();
 }
@@ -2131,19 +2492,26 @@ function renderProfileManager() {
     const color = prof.color || '#9d50ff';
     const bgRgba = hexToRgba(color, 0.15);
     const borderRgba = hexToRgba(color, 0.4);
+    const isLocked = isProfileLocked(prof);
+
+    const passBadge = prof.passwordHash
+      ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1 shrink-0"><i data-lucide="lock" class="w-3 h-3 text-rose-400"></i> ${isLocked ? 'Terkunci' : 'Terbuka'}</span>`
+      : `<span class="text-[10px] px-2 py-0.5 rounded-full text-[#6f6585] border border-[#2d1f50] flex items-center gap-1 shrink-0"><i data-lucide="unlock" class="w-3 h-3"></i> Bebas</span>`;
 
     return `
       <div class="p-4 rounded-xl border ${isActive ? 'border-purple-500/80 bg-[#1e1438] shadow-lg shadow-purple-900/20' : 'border-[#2d1f50] bg-[#150d28] hover:bg-[#1b1232]'} transition flex flex-col justify-between gap-3">
         <div class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold shrink-0 shadow-md"
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold shrink-0 shadow-md relative"
               style="background-color: ${bgRgba}; border: 1.5px solid ${borderRgba}; color: ${color};">
               ${escapeHtml(prof.avatar || '👤')}
+              ${prof.passwordHash ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px]"><i data-lucide="lock" class="w-2.5 h-2.5"></i></span>` : ''}
             </div>
             <div class="min-w-0">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <h4 class="font-bold text-white text-sm truncate">${escapeHtml(prof.name)}</h4>
                 ${isActive ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktif</span>` : ''}
+                ${passBadge}
               </div>
               <p class="text-xs text-[#9f96b5] truncate">${escapeHtml(prof.role || 'Personal')}</p>
             </div>
@@ -2173,11 +2541,11 @@ function renderProfileManager() {
 
         ${!isActive ? `
           <button onclick="switchProfile('${prof.id}')" class="w-full mt-1 py-1.5 px-3 text-xs font-semibold rounded-lg bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/30 hover:border-purple-500 transition flex items-center justify-center gap-1.5">
-            <i data-lucide="check" class="w-3.5 h-3.5"></i> Gunakan Profil Ini
+            <i data-lucide="${prof.passwordHash ? 'lock' : 'check'}" class="w-3.5 h-3.5"></i> Gunakan Profil Ini
           </button>
         ` : `
-          <div class="w-full mt-1 py-1 px-3 text-[11px] font-semibold text-center text-emerald-400 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-            Sedang Digunakan
+          <div class="w-full mt-1 py-1 px-3 text-[11px] font-semibold text-center text-emerald-400 bg-emerald-500/10 rounded-lg border border-emerald-500/20 flex items-center justify-center gap-1.5">
+            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Sedang Digunakan
           </div>
         `}
       </div>
@@ -2280,4 +2648,5 @@ window.addEventListener('DOMContentLoaded', () => {
   setAnalysisTab(state.analysisTab || 'expense');
 
   updateUI();
+  checkLockScreenState();
 });
