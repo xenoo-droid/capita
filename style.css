@@ -1,0 +1,83 @@
+/* Custom tweaks & transitions for KapitalKula */
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Custom Scrollbar for list container */
+#expenseListContainer::-webkit-scrollbar {
+  width: 5px;
+}
+#expenseListContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+#expenseListContainer::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.4);
+  border-radius: 9999px;
+}
+
+/* Active and Inactive Desktop Tabs */
+.tab-btn.active-tab {
+  color: #4f46e5;
+  border-color: #4f46e5;
+}
+.dark .tab-btn.active-tab {
+  color: #818cf8;
+  border-color: #818cf8;
+}
+.tab-btn.inactive-tab {
+  color: #64748b;
+  border-color: transparent;
+}
+.dark .tab-btn.inactive-tab {
+  color: #94a3b8;
+  border-color: transparent;
+}
+.tab-btn.inactive-tab:hover {
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+.dark .tab-btn.inactive-tab:hover {
+  color: #f1f5f9;
+  border-color: #334155;
+}
+
+/* Mobile Bottom Navigation active states */
+.mobile-tab-btn.active-m-tab {
+  color: #4f46e5;
+}
+.dark .mobile-tab-btn.active-m-tab {
+  color: #818cf8;
+}
+.mobile-tab-btn.inactive-m-tab {
+  color: #94a3b8;
+}
+.dark .mobile-tab-btn.inactive-m-tab {
+  color: #64748b;
+}
+
+/* Modal animation */
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-scale-in {
+  animation: scaleIn 0.15s ease-out forwards;
+}
+
+/* Mobile tap target improvement */
+button, input, select {
+  -webkit-tap-highlight-color: transparent;
+}
