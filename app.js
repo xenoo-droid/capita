@@ -1,11 +1,11 @@
 /**
- * KapitalKula - Logic & State Management
- * Simple Capital Allocation & Money Management for College Students
+ * Allocata - Capital Allocation Dashboard & Money Management
+ * Inspired by executive dark purple analytics interface
  */
 
 const todayIso = new Date().toISOString().split('T')[0];
 
-// Default State
+// Default State in Allocata Palette
 const DEFAULT_STATE = {
   capital: 1500000,
   cycle: {
@@ -17,21 +17,21 @@ const DEFAULT_STATE = {
     customStartDate: todayIso
   },
   categories: [
-    { id: 'cat-needs', name: 'Kebutuhan Pokok (Makan & Kos)', percent: 50, color: '#4f46e5' },
-    { id: 'cat-study', name: 'Kuliah & Kuota Internet', percent: 20, color: '#06b6d4' },
-    { id: 'cat-wants', name: 'Nongkrong & Hiburan', percent: 15, color: '#f59e0b' },
-    { id: 'cat-save', name: 'Tabungan & Dana Darurat', percent: 15, color: '#10b981' }
+    { id: 'cat-needs', name: 'Tech / Kebutuhan Pokok', percent: 50, color: '#b388ff' },
+    { id: 'cat-study', name: 'R&D / Kuliah & Kuota', percent: 20, color: '#f6ad55' },
+    { id: 'cat-wants', name: 'Marketing / Hiburan', percent: 15, color: '#48bb78' },
+    { id: 'cat-save', name: 'Reserves / Tabungan', percent: 15, color: '#38bdf8' }
   ],
   expenses: [
-    { id: 'exp-1', amount: 25000, categoryId: 'cat-needs', note: 'Makan siang warteg + es teh', date: todayIso },
-    { id: 'exp-2', amount: 50000, categoryId: 'cat-study', note: 'Beli paket kuota data', date: todayIso },
-    { id: 'exp-3', amount: 28000, categoryId: 'cat-wants', note: 'Kopi susu senja tugas', date: todayIso }
+    { id: 'exp-1', amount: 25000, categoryId: 'cat-needs', note: 'Project Alpha (Makan Siang Warteg)', date: todayIso },
+    { id: 'exp-2', amount: 50000, categoryId: 'cat-study', note: 'R&D Initiative (Paket Data / Kuota)', date: todayIso },
+    { id: 'exp-3', amount: 28000, categoryId: 'cat-wants', note: 'Market Expansion (Kopi Senja Tugas)', date: todayIso }
   ],
   incomes: [
-    { id: 'inc-1', amount: 150000, title: 'Bantu desain pamflet BEM', date: todayIso, allocMode: 'proportional', targetCategoryId: null }
+    { id: 'inc-1', amount: 200000, title: 'Freelance Design Poster BEM', date: todayIso, allocMode: 'proportional', targetCategoryId: null }
   ],
   chartMode: 'alloc', // 'alloc' | 'real'
-  theme: 'light'
+  theme: 'dark'
 };
 
 const STORAGE_KEY = 'kapitalkula_app_data_v1';
@@ -49,7 +49,6 @@ function loadState() {
     if (raw) {
       const parsed = JSON.parse(raw);
       const loaded = { ...DEFAULT_STATE, ...parsed };
-      // Migrasi data lama jika ada
       if (!loaded.incomes) loaded.incomes = [];
       if (loaded.cycle) {
         if (!loaded.cycle.monthlyStartDay) loaded.cycle.monthlyStartDay = loaded.cycle.startDay || 1;
@@ -86,7 +85,6 @@ function formatDateID(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   return d.toLocaleDateString('id-ID', {
-    weekday: 'short',
     day: 'numeric',
     month: 'short',
     year: 'numeric'
@@ -179,16 +177,16 @@ function getCurrentCycleIncomes() {
   });
 }
 
-// Hitung alokasi budget dinamis (memperhitungkan uang masuk proporsional dan langsung)
+// Hitung alokasi budget dinamis
 function getCategoryBudgets(currentIncomes) {
   const baseCapital = Number(state.capital) || 0;
   
-  // Pemasukan yang dibagi proporsional ke semua pos
+  // Pemasukan proporsional
   const propIncome = (currentIncomes || [])
     .filter(inc => inc.allocMode === 'proportional')
     .reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
 
-  // Pemasukan yang dialokasikan penuh ke pos tertentu
+  // Pemasukan langsung per pos
   const directMap = {};
   state.categories.forEach(c => directMap[c.id] = 0);
   (currentIncomes || [])
@@ -230,47 +228,39 @@ function updateUI() {
   const dailySafe = Math.max(0, Math.floor(remaining / remainingDays));
 
   // Update Header Badges
-  const cycleBadge = document.getElementById('cycleBadge');
-  if (cycleBadge) {
-    cycleBadge.innerText = badge;
-  }
+  const sideCycle = document.getElementById('sideCycleBadge');
+  const sideRemain = document.getElementById('sideRemainingDays');
+  const mobCycle = document.getElementById('mobileCycleBadge');
+  const topHeaderCycle = document.getElementById('topHeaderCycle');
+  
+  if (sideCycle) sideCycle.innerText = badge;
+  if (sideRemain) sideRemain.innerText = `Sisa ${remainingDays} hari di siklus ini`;
+  if (mobCycle) mobCycle.innerText = badge;
+  if (topHeaderCycle) topHeaderCycle.innerText = label;
 
   // Update Highlight Cards
   const elTotalCapital = document.getElementById('statTotalCapital');
-  const elCycleLabel = document.getElementById('statCycleLabel');
+  const elCapitalSub = document.getElementById('statCapitalSub');
   const elTotalSpent = document.getElementById('statTotalSpent');
   const elSpentPercent = document.getElementById('statSpentPercent');
-  const elRemaining = document.getElementById('statRemaining');
-  const elHealthStatus = document.getElementById('statHealthStatus');
   const elDailySafe = document.getElementById('statDailySafe');
   const elRemainingDays = document.getElementById('statRemainingDays');
 
-  if (elTotalCapital) {
-    if (budgetInfo.totalExtra > 0) {
-      elTotalCapital.innerHTML = `${formatIDR(effectiveCapital)}<span class="text-[11px] block font-normal text-slate-400 mt-0.5">(Saku ${formatIDR(budgetInfo.baseCapital)} + Rezeki ${formatIDR(budgetInfo.totalExtra)})</span>`;
+  if (elTotalCapital) elTotalCapital.innerText = formatIDR(effectiveCapital);
+  if (elCapitalSub) {
+    if (remaining >= 0) {
+      elCapitalSub.innerHTML = `<i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> ${formatIDR(remaining)} Sisa Kas`;
+      elCapitalSub.className = 'text-xs text-emerald-400 font-semibold mt-1 flex items-center gap-1';
     } else {
-      elTotalCapital.innerText = formatIDR(effectiveCapital);
-    }
-  }
-  if (elCycleLabel) elCycleLabel.innerText = `Siklus: ${label}`;
-  if (elTotalSpent) elTotalSpent.innerText = formatIDR(totalSpent);
-  if (elSpentPercent) elSpentPercent.innerText = `${spentPct}% dari total modal`;
-  if (elRemaining) elRemaining.innerText = formatIDR(remaining);
-  
-  if (elHealthStatus) {
-    if (remaining < 0) {
-      elHealthStatus.innerText = 'Kondisi: Overbudget / Boncos!';
-      elHealthStatus.className = 'text-[11px] text-rose-600 dark:text-rose-400 font-bold mt-0.5';
-    } else if (spentPct > 80) {
-      elHealthStatus.innerText = 'Kondisi: Waspada (Sisa Sedikit)';
-      elHealthStatus.className = 'text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5';
-    } else {
-      elHealthStatus.innerText = 'Kondisi: Aman Terkendali';
-      elHealthStatus.className = 'text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5';
+      elCapitalSub.innerHTML = `<i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Overbudget -${formatIDR(Math.abs(remaining))}`;
+      elCapitalSub.className = 'text-xs text-rose-400 font-semibold mt-1 flex items-center gap-1';
     }
   }
 
-  if (elDailySafe) elDailySafe.innerHTML = `${formatIDR(dailySafe)}<span class="text-xs font-normal">/hari</span>`;
+  if (elTotalSpent) elTotalSpent.innerText = formatIDR(totalSpent);
+  if (elSpentPercent) elSpentPercent.innerText = `${spentPct}% dari total pool`;
+
+  if (elDailySafe) elDailySafe.innerHTML = `${formatIDR(dailySafe)}<span class="text-xs font-normal text-purple-300">/hari</span>`;
   if (elRemainingDays) elRemainingDays.innerText = `Sisa ${remainingDays} hari di siklus ini`;
 
   // Render Charts
@@ -298,7 +288,7 @@ function updateUI() {
 }
 
 // ==========================================
-// CHARTS (CHART.JS)
+// CHARTS (CHART.JS - ALLOCATA THEME)
 // ==========================================
 
 function getCategorySpentMap(expensesList) {
@@ -320,12 +310,14 @@ function setChartMode(mode) {
   
   const btnAlloc = document.getElementById('btnChartAlloc');
   const btnReal = document.getElementById('btnChartReal');
-  if (mode === 'alloc') {
-    btnAlloc.className = 'px-2.5 py-1 rounded-md font-medium bg-white dark:bg-slate-600 text-indigo-600 dark:text-white shadow-xs';
-    btnReal.className = 'px-2.5 py-1 rounded-md font-medium text-slate-600 dark:text-slate-300';
-  } else {
-    btnReal.className = 'px-2.5 py-1 rounded-md font-medium bg-white dark:bg-slate-600 text-indigo-600 dark:text-white shadow-xs';
-    btnAlloc.className = 'px-2.5 py-1 rounded-md font-medium text-slate-600 dark:text-slate-300';
+  if (btnAlloc && btnReal) {
+    if (mode === 'alloc') {
+      btnAlloc.className = 'px-2 py-0.5 rounded-md font-medium bg-purple-600 text-white shadow-xs';
+      btnReal.className = 'px-2 py-0.5 rounded-md font-medium text-[#9f96b5]';
+    } else {
+      btnReal.className = 'px-2 py-0.5 rounded-md font-medium bg-purple-600 text-white shadow-xs';
+      btnAlloc.className = 'px-2 py-0.5 rounded-md font-medium text-[#9f96b5]';
+    }
   }
 
   updateUI();
@@ -342,9 +334,8 @@ function renderCharts(currentExpenses, currentIncomes, budgetInfo) {
   }
 
   const spentMap = getCategorySpentMap(currentExpenses);
-  const isDark = document.documentElement.classList.contains('dark');
-  const textColor = isDark ? '#cbd5e1' : '#475569';
-  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const textColor = '#9f96b5';
+  const gridColor = 'rgba(255, 255, 255, 0.05)';
 
   const labels = state.categories.map(c => c.name);
   const colors = state.categories.map(c => c.color);
@@ -371,30 +362,34 @@ function renderCharts(currentExpenses, currentIncomes, budgetInfo) {
     pieChartInstance.destroy();
   }
 
-  // Fallback if all zeros
   const hasData = pieData.some(v => v > 0);
   const displayPieData = hasData ? pieData : [1];
-  const displayPieColors = hasData ? colors : ['#cbd5e1'];
+  const displayPieColors = hasData ? colors : ['#2d1f50'];
 
   pieChartInstance = new Chart(ctxPie, {
     type: 'doughnut',
     data: {
-      labels: hasData ? labels : ['Belum ada alokasi'],
+      labels: hasData ? labels : ['Belum ada data'],
       datasets: [{
         data: displayPieData,
         backgroundColor: displayPieColors,
-        borderWidth: 2,
-        borderColor: isDark ? '#1e293b' : '#ffffff',
+        borderWidth: 3,
+        borderColor: '#1b1232',
         hoverOffset: 6
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '72%',
+      cutout: '70%',
       plugins: {
         legend: { display: false },
         tooltip: {
+          backgroundColor: '#150d28',
+          titleColor: '#ffffff',
+          bodyColor: '#b388ff',
+          borderColor: '#2d1f50',
+          borderWidth: 1,
           callbacks: {
             label: function(context) {
               if (!hasData) return 'Kosong';
@@ -413,10 +408,10 @@ function renderCharts(currentExpenses, currentIncomes, budgetInfo) {
   const legendContainer = document.getElementById('chartLegendCustom');
   if (legendContainer) {
     legendContainer.innerHTML = state.categories.map(c => `
-      <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-700/50">
+      <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#150d28] border border-[#2d1f50]">
         <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${c.color}"></span>
-        <span class="text-slate-600 dark:text-slate-300 font-medium">${c.name}</span>
-        <span class="text-slate-400">(${c.percent}%)</span>
+        <span class="text-white font-medium">${c.name}</span>
+        <span class="text-[#9f96b5]">(${c.percent}%)</span>
       </div>
     `).join('');
   }
@@ -432,14 +427,14 @@ function renderCharts(currentExpenses, currentIncomes, budgetInfo) {
   barChartInstance = new Chart(ctxBar, {
     type: 'bar',
     data: {
-      labels: state.categories.map(c => c.name.length > 15 ? c.name.substring(0, 15) + '...' : c.name),
+      labels: state.categories.map(c => c.name.length > 14 ? c.name.substring(0, 14) + '..' : c.name),
       datasets: [
         {
-          label: 'Alokasi Budget',
+          label: 'Alokasi Target',
           data: allocData,
-          backgroundColor: isDark ? '#4338ca' : '#6366f1',
-          borderRadius: 6,
-          maxBarThickness: 24
+          backgroundColor: state.categories.map(c => c.color),
+          borderRadius: 8,
+          maxBarThickness: 32
         },
         {
           label: 'Realisasi Terpakai',
@@ -447,10 +442,10 @@ function renderCharts(currentExpenses, currentIncomes, budgetInfo) {
           backgroundColor: state.categories.map(c => {
             const budget = budgetInfo.budgets[c.id] || 0;
             const spent = spentMap[c.id] || 0;
-            return spent > budget ? '#f43f5e' : (isDark ? '#059669' : '#10b981');
+            return spent > budget ? '#f56565' : 'rgba(255, 255, 255, 0.2)';
           }),
-          borderRadius: 6,
-          maxBarThickness: 24
+          borderRadius: 8,
+          maxBarThickness: 32
         }
       ]
     },
@@ -477,6 +472,11 @@ function renderCharts(currentExpenses, currentIncomes, budgetInfo) {
           labels: { color: textColor, font: { size: 11 }, boxWidth: 12 }
         },
         tooltip: {
+          backgroundColor: '#150d28',
+          titleColor: '#ffffff',
+          bodyColor: '#b388ff',
+          borderColor: '#2d1f50',
+          borderWidth: 1,
           callbacks: {
             label: function(context) {
               return ` ${context.dataset.label}: ${formatIDR(context.raw)}`;
@@ -506,41 +506,36 @@ function renderCategoryBars(currentExpenses, currentIncomes, budgetInfo) {
     const remaining = budget - spent;
     const pct = budget > 0 ? Math.round((spent / budget) * 100) : 0;
     
-    let barColor = 'bg-indigo-500';
-    let statusText = `${formatIDR(remaining)} tersisa`;
-    let statusClass = 'text-slate-500 dark:text-slate-400';
+    let statusText = `${formatIDR(remaining)} sisa`;
+    let statusClass = 'text-emerald-400';
 
     if (spent > budget) {
-      barColor = 'bg-rose-500';
       statusText = `Overbudget +${formatIDR(spent - budget)}`;
-      statusClass = 'text-rose-500 font-semibold';
+      statusClass = 'text-rose-400 font-bold';
     } else if (pct >= 85) {
-      barColor = 'bg-amber-500';
-      statusClass = 'text-amber-500 font-semibold';
-    } else {
-      barColor = 'bg-emerald-500';
+      statusClass = 'text-amber-400 font-semibold';
     }
 
     const hasDirectBonus = (budgetInfo.directMap && budgetInfo.directMap[cat.id] > 0);
-    const bonusText = hasDirectBonus ? `<span class="text-emerald-500 font-medium ml-1">(+${formatIDR(budgetInfo.directMap[cat.id])} khusus)</span>` : '';
+    const bonusText = hasDirectBonus ? `<span class="text-emerald-400 text-[10px] ml-1 font-semibold">(+${formatIDR(budgetInfo.directMap[cat.id])})</span>` : '';
 
     return `
-      <div class="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/60">
+      <div class="p-3.5 rounded-xl bg-[#150d28] border border-[#2d1f50]">
         <div class="flex items-center justify-between mb-1.5">
           <div class="flex items-center gap-2">
-            <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${cat.color}"></span>
-            <span class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">${cat.name}</span>
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${cat.color}"></span>
+            <span class="font-bold text-xs sm:text-sm text-white">${cat.name}</span>
           </div>
           <span class="text-xs font-semibold ${statusClass}">${statusText}</span>
         </div>
 
-        <div class="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden mb-1.5">
-          <div class="${barColor} h-full rounded-full transition-all duration-300" style="width: ${Math.min(pct, 100)}%"></div>
+        <div class="w-full h-2 rounded-full bg-[#231840] overflow-hidden mb-1.5">
+          <div class="h-full rounded-full transition-all duration-300" style="width: ${Math.min(pct, 100)}%; background-color: ${cat.color}"></div>
         </div>
 
-        <div class="flex items-center justify-between text-[11px] text-slate-400">
-          <span>Terpakai: <strong class="text-slate-700 dark:text-slate-300">${formatIDR(spent)}</strong></span>
-          <span>Target Alokasi: <strong class="text-slate-700 dark:text-slate-300">${formatIDR(budget)}</strong>${bonusText}</span>
+        <div class="flex items-center justify-between text-[11px] text-[#9f96b5]">
+          <span>Terpakai: <strong class="text-white">${formatIDR(spent)}</strong></span>
+          <span>Target: <strong class="text-white">${formatIDR(budget)}</strong>${bonusText}</span>
         </div>
       </div>
     `;
@@ -560,13 +555,13 @@ function setTxFormType(type) {
   if (!btnExp || !btnInc) return;
 
   if (type === 'expense') {
-    btnExp.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-slate-800 text-rose-500 shadow-xs flex items-center justify-center gap-1.5 transition';
-    btnInc.className = 'flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-emerald-500 flex items-center justify-center gap-1.5 transition';
+    btnExp.className = 'flex-1 py-2 text-xs font-bold rounded-lg bg-purple-600 text-white shadow-md flex items-center justify-center gap-1.5 transition';
+    btnInc.className = 'flex-1 py-2 text-xs font-semibold rounded-lg text-[#9f96b5] hover:text-emerald-400 flex items-center justify-center gap-1.5 transition';
     if (formExp) formExp.classList.remove('hidden');
     if (formInc) formInc.classList.add('hidden');
   } else {
-    btnInc.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-slate-800 text-emerald-500 shadow-xs flex items-center justify-center gap-1.5 transition';
-    btnExp.className = 'flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-rose-500 flex items-center justify-center gap-1.5 transition';
+    btnInc.className = 'flex-1 py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1.5 transition';
+    btnExp.className = 'flex-1 py-2 text-xs font-semibold rounded-lg text-[#9f96b5] hover:text-purple-400 flex items-center justify-center gap-1.5 transition';
     if (formInc) formInc.classList.remove('hidden');
     if (formExp) formExp.classList.add('hidden');
   }
@@ -708,15 +703,83 @@ function deleteIncome(id) {
   }
 }
 
+// Render Desktop Table in Dashboard (as in reference monitor)
+function renderDesktopRecentTable(allTx, catMap) {
+  const tableBody = document.getElementById('desktopRecentTxTable');
+  if (!tableBody) return;
+
+  if (!allTx || allTx.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="5" class="py-6 text-center text-[#6f6585]">
+          Belum ada transaksi di siklus ini. Klik <strong>+ Catat Transaksi</strong> untuk memulai.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const recent5 = allTx.slice(0, 5);
+  tableBody.innerHTML = recent5.map(item => {
+    if (item.type === 'expense') {
+      const cat = catMap[item.categoryId] || { name: 'Lainnya', color: '#b388ff' };
+      return `
+        <tr class="hover:bg-white/[0.02] transition">
+          <td class="py-3 font-semibold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full" style="background-color: ${cat.color}"></span>
+            ${escapeHtml(item.note)}
+          </td>
+          <td class="py-3 text-[#9f96b5]">${cat.name}</td>
+          <td class="py-3 font-bold text-white">-${formatIDR(item.amount)}</td>
+          <td class="py-3">
+            <span class="badge-approved px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+              Approved
+            </span>
+          </td>
+          <td class="py-3 text-right text-[#9f96b5]">${formatDateID(item.date)}</td>
+        </tr>
+      `;
+    } else {
+      const isDirect = item.allocMode === 'direct' && item.targetCategoryId;
+      const targetCat = isDirect ? (catMap[item.targetCategoryId] || { name: 'Pos Khusus' }) : null;
+      const catLabel = isDirect ? targetCat.name : 'Semua Pos';
+      return `
+        <tr class="hover:bg-white/[0.02] transition bg-emerald-950/10">
+          <td class="py-3 font-semibold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            ${escapeHtml(item.title)}
+          </td>
+          <td class="py-3 text-emerald-400/90">${catLabel}</td>
+          <td class="py-3 font-bold text-emerald-400">+${formatIDR(item.amount)}</td>
+          <td class="py-3">
+            <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+              +Rezeki
+            </span>
+          </td>
+          <td class="py-3 text-right text-[#9f96b5]">${formatDateID(item.date)}</td>
+        </tr>
+      `;
+    }
+  }).join('');
+}
+
+// Render Requests List in Tab 2 (Matches iPhone screen mockup)
 function renderTransactionList() {
   const container = document.getElementById('expenseListContainer');
   const txCountBadge = document.getElementById('txCountBadge');
-  if (!container) return;
 
   const currentExpenses = getCurrentCycleExpenses().map(e => ({ ...e, type: 'expense' }));
   const currentIncomes = getCurrentCycleIncomes().map(i => ({ ...i, type: 'income' }));
 
   let allTx = [...currentExpenses, ...currentIncomes].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const catMap = {};
+  state.categories.forEach(c => catMap[c.id] = c);
+
+  // Render recent table in dashboard
+  renderDesktopRecentTable(allTx, catMap);
+
+  if (!container) return;
 
   const filterType = document.getElementById('filterTxType')?.value || 'ALL';
   const filterCat = document.getElementById('filterExpCategory')?.value || 'ALL';
@@ -731,7 +794,7 @@ function renderTransactionList() {
     allTx = allTx.filter(t => {
       if (t.type === 'expense') return t.categoryId === filterCat;
       if (t.type === 'income') return t.allocMode === 'direct' && t.targetCategoryId === filterCat;
-      return true; // Proportional income affects all categories
+      return true;
     });
   }
 
@@ -739,84 +802,74 @@ function renderTransactionList() {
 
   if (allTx.length === 0) {
     container.innerHTML = `
-      <div class="py-12 text-center text-slate-400">
-        <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+      <div class="py-12 text-center text-[#6f6585]">
+        <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 opacity-40"></i>
         <p class="text-xs">Belum ada transaksi di siklus ini.</p>
-        <p class="text-[11px] mt-1 text-slate-500">Mulai catat pengeluaran atau pemasukan baru di form sebelah kiri.</p>
+        <p class="text-[11px] mt-1 text-[#9f96b5]">Mulai catat transaksi baru di form sebelah kiri.</p>
       </div>
     `;
     if (window.lucide) lucide.createIcons();
     return;
   }
 
-  const catMap = {};
-  state.categories.forEach(c => catMap[c.id] = c);
-
-  container.innerHTML = `
-    <div class="divide-y divide-slate-100 dark:divide-slate-700/60">
-      ${allTx.map(item => {
-        if (item.type === 'expense') {
-          const cat = catMap[item.categoryId] || { name: 'Lainnya', color: '#94a3b8' };
-          return `
-            <div class="py-3 flex items-center justify-between gap-3 group">
-              <div class="flex items-center gap-3">
-                <span class="w-2.5 h-10 rounded-full shrink-0" style="background-color: ${cat.color}"></span>
-                <div>
-                  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(item.note)}</p>
-                  <div class="flex items-center gap-2 mt-0.5">
-                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                      ${cat.name}
-                    </span>
-                    <span class="text-[11px] text-slate-400">${formatDateID(item.date)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-sm text-rose-500 dark:text-rose-400">-${formatIDR(item.amount)}</span>
-                <button onclick="deleteExpense('${item.id}')" title="Hapus" class="p-1.5 text-slate-300 hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
-                  <i data-lucide="trash" class="w-4 h-4"></i>
-                </button>
-              </div>
+  container.innerHTML = allTx.map(item => {
+    if (item.type === 'expense') {
+      const cat = catMap[item.categoryId] || { name: 'Lainnya', color: '#b388ff' };
+      return `
+        <div class="p-4 rounded-2xl bg-[#150d28] border border-[#2d1f50] hover:border-purple-500/40 transition group flex flex-col gap-2">
+          <div class="flex items-start justify-between">
+            <div>
+              <h4 class="font-bold text-sm text-white group-hover:text-purple-300 transition">${escapeHtml(item.note)}</h4>
+              <p class="text-xs text-[#9f96b5] mt-0.5 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full" style="background-color: ${cat.color}"></span>
+                ${cat.name}
+              </p>
             </div>
-          `;
-        } else {
-          // Income
-          const isDirect = item.allocMode === 'direct' && item.targetCategoryId;
-          const targetCat = isDirect ? (catMap[item.targetCategoryId] || { name: 'Pos Khusus' }) : null;
-          const allocLabel = isDirect ? `Masuk ke: ${targetCat.name}` : 'Alokasi: Dibagi ke Semua Pos';
-          return `
-            <div class="py-3 flex items-center justify-between gap-3 group bg-emerald-50/40 dark:bg-emerald-950/20 px-2 rounded-xl my-1 border border-emerald-100 dark:border-emerald-900/30">
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                  <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
-                </div>
-                <div>
-                  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    ${escapeHtml(item.title)}
-                    <span class="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">Rezeki Masuk</span>
-                  </p>
-                  <div class="flex items-center gap-2 mt-0.5">
-                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                      ${allocLabel}
-                    </span>
-                    <span class="text-[11px] text-slate-400">${formatDateID(item.date)}</span>
-                  </div>
-                </div>
-              </div>
+            <button onclick="deleteExpense('${item.id}')" title="Hapus" class="p-1.5 text-[#6f6585] hover:text-rose-400 rounded-lg hover:bg-white/5 transition">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
 
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-sm text-emerald-600 dark:text-emerald-400">+${formatIDR(item.amount)}</span>
-                <button onclick="deleteIncome('${item.id}')" title="Hapus" class="p-1.5 text-slate-300 hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
-                  <i data-lucide="trash" class="w-4 h-4"></i>
-                </button>
-              </div>
+          <div class="flex items-center justify-between pt-2 border-t border-[#2d1f50]/60">
+            <span class="font-extrabold text-base text-white">-${formatIDR(item.amount)}</span>
+            <div class="flex items-center gap-2">
+              <span class="badge-approved px-2.5 py-0.5 rounded-full text-[10px] font-bold">Approved</span>
+              <span class="text-[11px] text-[#9f96b5]">${formatDateID(item.date)}</span>
             </div>
-          `;
-        }
-      }).join('')}
-    </div>
-  `;
+          </div>
+        </div>
+      `;
+    } else {
+      // Income
+      const isDirect = item.allocMode === 'direct' && item.targetCategoryId;
+      const targetCat = isDirect ? (catMap[item.targetCategoryId] || { name: 'Pos Khusus' }) : null;
+      const allocLabel = isDirect ? targetCat.name : 'Semua Pos (Proposional)';
+      return `
+        <div class="p-4 rounded-2xl bg-[#150d28] border border-emerald-500/30 hover:border-emerald-500/60 transition group flex flex-col gap-2">
+          <div class="flex items-start justify-between">
+            <div>
+              <h4 class="font-bold text-sm text-white group-hover:text-emerald-300 transition">${escapeHtml(item.title)}</h4>
+              <p class="text-xs text-emerald-400 mt-0.5 flex items-center gap-1.5">
+                <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i>
+                Masuk ke: ${allocLabel}
+              </p>
+            </div>
+            <button onclick="deleteIncome('${item.id}')" title="Hapus" class="p-1.5 text-[#6f6585] hover:text-rose-400 rounded-lg hover:bg-white/5 transition">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between pt-2 border-t border-[#2d1f50]/60">
+            <span class="font-extrabold text-base text-emerald-400">+${formatIDR(item.amount)}</span>
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-bold">+Rezeki</span>
+              <span class="text-[11px] text-[#9f96b5]">${formatDateID(item.date)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }).join('');
 
   if (window.lucide) lucide.createIcons();
 }
@@ -843,25 +896,25 @@ function setQuickCapital(val) {
 function applyPreset(presetKey) {
   const presets = {
     standard_student: [
-      { id: 'cat-needs', name: 'Kebutuhan Pokok (Makan, Kost, Transport)', percent: 50, color: '#4f46e5' },
-      { id: 'cat-study', name: 'Kuliah, Fotokopi & Kuota Internet', percent: 20, color: '#06b6d4' },
-      { id: 'cat-wants', name: 'Nongkrong & Hiburan (Self Reward)', percent: 15, color: '#f59e0b' },
-      { id: 'cat-save', name: 'Tabungan & Dana Darurat', percent: 15, color: '#10b981' }
+      { id: 'cat-needs', name: 'Tech / Kebutuhan Pokok', percent: 50, color: '#b388ff' },
+      { id: 'cat-study', name: 'R&D / Kuliah & Kuota', percent: 20, color: '#f6ad55' },
+      { id: 'cat-wants', name: 'Marketing / Hiburan', percent: 15, color: '#48bb78' },
+      { id: 'cat-save', name: 'Reserves / Tabungan', percent: 15, color: '#38bdf8' }
     ],
     rule_50_30_20: [
-      { id: 'cat-needs', name: 'Kebutuhan Pokok (Needs)', percent: 50, color: '#4f46e5' },
-      { id: 'cat-wants', name: 'Keinginan & Gaya Hidup (Wants)', percent: 30, color: '#ec4899' },
-      { id: 'cat-save', name: 'Tabungan & Investasi (Savings)', percent: 20, color: '#10b981' }
+      { id: 'cat-needs', name: 'Needs / Pokok', percent: 50, color: '#b388ff' },
+      { id: 'cat-wants', name: 'Wants / Hiburan', percent: 30, color: '#f56565' },
+      { id: 'cat-save', name: 'Savings / Tabungan', percent: 20, color: '#48bb78' }
     ],
     frugal: [
-      { id: 'cat-needs', name: 'Kebutuhan Pokok (Mode Hemat)', percent: 65, color: '#4f46e5' },
-      { id: 'cat-wants', name: 'Jajan & Hiburan Minimalis', percent: 10, color: '#f59e0b' },
-      { id: 'cat-save', name: 'Tabungan Masa Depan', percent: 25, color: '#10b981' }
+      { id: 'cat-needs', name: 'Pokok (Mode Hemat)', percent: 65, color: '#b388ff' },
+      { id: 'cat-wants', name: 'Jajan Minimalis', percent: 10, color: '#f6ad55' },
+      { id: 'cat-save', name: 'Reserves Masa Depan', percent: 25, color: '#48bb78' }
     ],
     weekly_compact: [
-      { id: 'cat-daily', name: 'Makan & Operasional Harian', percent: 60, color: '#4f46e5' },
-      { id: 'cat-weekend', name: 'Nongkrong & Weekend', percent: 25, color: '#f59e0b' },
-      { id: 'cat-reserve', name: 'Cadangan & Tabungan', percent: 15, color: '#10b981' }
+      { id: 'cat-daily', name: 'Operasional Harian', percent: 60, color: '#b388ff' },
+      { id: 'cat-weekend', name: 'Weekend / Jajan', percent: 25, color: '#f6ad55' },
+      { id: 'cat-reserve', name: 'Cadangan & Simpanan', percent: 15, color: '#48bb78' }
     ]
   };
 
@@ -914,34 +967,34 @@ function renderAllocationTable() {
   if (badgeTotal) {
     badgeTotal.innerText = `${totalPercent}%`;
     if (totalPercent === 100) {
-      badgeTotal.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300';
+      badgeTotal.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
     } else {
-      badgeTotal.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 animate-pulse';
+      badgeTotal.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse';
     }
   }
 
   container.innerHTML = state.categories.map(cat => {
     const allocatedRp = Math.round(capital * (cat.percent / 100));
     return `
-      <div class="p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div class="p-3.5 rounded-xl border border-[#2d1f50] bg-[#150d28] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div class="flex items-center gap-3 flex-1 w-full sm:w-auto">
-          <input type="color" value="${cat.color}" onchange="updateCategoryColor('${cat.id}', this.value)" class="w-8 h-8 rounded-lg cursor-pointer border-0 shrink-0">
+          <input type="color" value="${cat.color}" onchange="updateCategoryColor('${cat.id}', this.value)" class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent shrink-0">
           <input type="text" value="${escapeHtml(cat.name)}" onchange="updateCategoryName('${cat.id}', this.value)"
-            class="text-sm font-semibold bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:border-indigo-500 focus:outline-none w-full sm:w-72 text-slate-800 dark:text-slate-100">
+            class="text-sm font-semibold bg-transparent border-b border-dashed border-[#2d1f50] focus:border-purple-500 focus:outline-none w-full sm:w-72 text-white">
         </div>
 
         <div class="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
           <div class="flex items-center gap-1.5">
             <input type="number" min="0" max="100" value="${cat.percent}" onchange="updateCategoryPercent('${cat.id}', this.value)"
-              class="w-16 px-2 py-1 text-center font-bold text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-            <span class="text-xs text-slate-500 font-semibold">%</span>
+              class="w-16 px-2 py-1 text-center font-bold text-sm bg-[#1b1232] border border-[#2d1f50] rounded-lg text-white">
+            <span class="text-xs text-[#9f96b5] font-semibold">%</span>
           </div>
 
           <div class="text-right min-w-[120px]">
-            <span class="text-sm font-bold text-indigo-600 dark:text-indigo-400">${formatIDR(allocatedRp)}</span>
+            <span class="text-sm font-bold text-purple-300">${formatIDR(allocatedRp)}</span>
           </div>
 
-          <button onclick="deleteCategory('${cat.id}')" title="Hapus Pos" class="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <button onclick="deleteCategory('${cat.id}')" title="Hapus Pos" class="p-1.5 text-[#6f6585] hover:text-rose-400 rounded-lg hover:bg-white/5 transition">
             <i data-lucide="trash" class="w-4 h-4"></i>
           </button>
         </div>
@@ -1067,25 +1120,25 @@ function updateSettingsInputs() {
   const cWrap = document.getElementById('customSettingsWrap');
 
   [cardMonthly, cardWeekly, cardCustom].forEach(card => {
-    if (card) card.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/20', 'dark:bg-indigo-950/20');
+    if (card) card.classList.remove('border-purple-500', 'bg-[#1b1232]');
   });
 
   if (curType === 'monthly') {
-    if (cardMonthly) cardMonthly.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/20', 'dark:bg-indigo-950/20');
-    if (mWrap) mWrap.classList.remove('opacity-50', 'pointer-events-none');
-    if (wWrap) wWrap.classList.add('opacity-50', 'pointer-events-none');
-    if (cWrap) cWrap.classList.add('opacity-50', 'pointer-events-none');
+    if (cardMonthly) cardMonthly.classList.add('border-purple-500', 'bg-[#1b1232]');
+    if (mWrap) mWrap.classList.remove('opacity-40', 'pointer-events-none');
+    if (wWrap) wWrap.classList.add('opacity-40', 'pointer-events-none');
+    if (cWrap) cWrap.classList.add('opacity-40', 'pointer-events-none');
   } else if (curType === 'weekly') {
-    if (cardWeekly) cardWeekly.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/20', 'dark:bg-indigo-950/20');
-    if (mWrap) mWrap.classList.add('opacity-50', 'pointer-events-none');
-    if (wWrap) wWrap.classList.remove('opacity-50', 'pointer-events-none');
-    if (cWrap) cWrap.classList.add('opacity-50', 'pointer-events-none');
+    if (cardWeekly) cardWeekly.classList.add('border-purple-500', 'bg-[#1b1232]');
+    if (mWrap) mWrap.classList.add('opacity-40', 'pointer-events-none');
+    if (wWrap) wWrap.classList.remove('opacity-40', 'pointer-events-none');
+    if (cWrap) cWrap.classList.add('opacity-40', 'pointer-events-none');
   } else {
     // custom_days
-    if (cardCustom) cardCustom.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/20', 'dark:bg-indigo-950/20');
-    if (mWrap) mWrap.classList.add('opacity-50', 'pointer-events-none');
-    if (wWrap) wWrap.classList.add('opacity-50', 'pointer-events-none');
-    if (cWrap) cWrap.classList.remove('opacity-50', 'pointer-events-none');
+    if (cardCustom) cardCustom.classList.add('border-purple-500', 'bg-[#1b1232]');
+    if (mWrap) mWrap.classList.add('opacity-40', 'pointer-events-none');
+    if (wWrap) wWrap.classList.add('opacity-40', 'pointer-events-none');
+    if (cWrap) cWrap.classList.remove('opacity-40', 'pointer-events-none');
   }
 
   // Populate input values
@@ -1109,7 +1162,7 @@ function updateSettingsInputs() {
 function exportDataJSON() {
   const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
   const dlAnchor = document.createElement('a');
-  const filename = `kapitalkula_backup_${new Date().toISOString().split('T')[0]}.json`;
+  const filename = `allocata_backup_${new Date().toISOString().split('T')[0]}.json`;
   dlAnchor.setAttribute('href', dataStr);
   dlAnchor.setAttribute('download', filename);
   dlAnchor.click();
@@ -1139,7 +1192,7 @@ function importDataJSON(event) {
 }
 
 function confirmResetData() {
-  if (confirm('Yakin ingin mereset semua data ke pengaturan awal? Semua catatan pengeluaran akan terhapus.')) {
+  if (confirm('Yakin ingin mereset semua data ke pengaturan awal? Semua catatan akan terhapus.')) {
     localStorage.removeItem(STORAGE_KEY);
     state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     saveState();
@@ -1149,40 +1202,27 @@ function confirmResetData() {
 }
 
 // ==========================================
-// TABS & THEME
+// TABS & MODALS
 // ==========================================
 
 function switchTab(tabId) {
   const tabs = ['dashboard', 'expenses', 'allocation', 'settings'];
   tabs.forEach(t => {
     const content = document.getElementById(`tabContent-${t}`);
-    const deskBtn = document.getElementById(`tabBtn-${t}`);
-    const mobBtn = document.getElementById(`mTabBtn-${t}`);
+    const sideBtn = document.getElementById(`sideBtn-${t}`);
+    const mNavBtn = document.getElementById(`mNavBtn-${t}`);
 
     if (t === tabId) {
       if (content) content.classList.remove('hidden');
-      if (deskBtn) {
-        deskBtn.classList.remove('inactive-tab');
-        deskBtn.classList.add('active-tab');
-      }
-      if (mobBtn) {
-        mobBtn.classList.remove('inactive-m-tab');
-        mobBtn.classList.add('active-m-tab');
-      }
+      if (sideBtn) sideBtn.classList.add('active-sidebar');
+      if (mNavBtn) mNavBtn.classList.add('active-m-nav');
     } else {
       if (content) content.classList.add('hidden');
-      if (deskBtn) {
-        deskBtn.classList.remove('active-tab');
-        deskBtn.classList.add('inactive-tab');
-      }
-      if (mobBtn) {
-        mobBtn.classList.remove('active-m-tab');
-        mobBtn.classList.add('inactive-m-tab');
-      }
+      if (sideBtn) sideBtn.classList.remove('active-sidebar');
+      if (mNavBtn) mNavBtn.classList.remove('active-m-nav');
     }
   });
 
-  // Re-render chart size when tab becomes visible
   if (tabId === 'dashboard') {
     setTimeout(() => updateUI(), 50);
   }
@@ -1190,46 +1230,12 @@ function switchTab(tabId) {
   if (window.lucide) lucide.createIcons();
 }
 
-function initTheme() {
-  const savedTheme = localStorage.getItem('kapitalkula_theme') || 
-    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  
-  applyTheme(savedTheme);
-
-  const btnTheme = document.getElementById('btnThemeToggle');
-  if (btnTheme) {
-    btnTheme.addEventListener('click', () => {
-      const current = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-      const next = current === 'dark' ? 'light' : 'dark';
-      applyTheme(next);
-      localStorage.setItem('kapitalkula_theme', next);
-      updateUI();
-    });
-  }
-}
-
-function applyTheme(theme) {
-  const icon = document.getElementById('themeIcon');
-  if (theme === 'dark') {
-    document.documentElement.classList.add('dark');
-    if (icon) icon.setAttribute('data-lucide', 'sun');
-  } else {
-    document.documentElement.classList.remove('dark');
-    if (icon) icon.setAttribute('data-lucide', 'moon');
-  }
-  if (window.lucide) lucide.createIcons();
-}
-
-// Help Modal
-const btnHelp = document.getElementById('btnMobileHelp');
-if (btnHelp) {
-  btnHelp.addEventListener('click', () => {
-    document.getElementById('modalHelp').classList.remove('hidden');
-  });
+function openHelpModal() {
+  document.getElementById('modalHelp')?.classList.remove('hidden');
 }
 
 function closeHelpModal() {
-  document.getElementById('modalHelp').classList.add('hidden');
+  document.getElementById('modalHelp')?.classList.add('hidden');
 }
 
 // Helper: Escape HTML
@@ -1251,12 +1257,10 @@ function escapeHtml(str) {
 // ==========================================
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Set default expense and income date to today
   const expDateInput = document.getElementById('expDate');
   const incDateInput = document.getElementById('incDate');
   if (expDateInput) expDateInput.value = todayIso;
   if (incDateInput) incDateInput.value = todayIso;
 
-  initTheme();
   updateUI();
 });

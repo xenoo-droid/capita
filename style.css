@@ -1,83 +1,126 @@
-/* Custom tweaks & transitions for KapitalKula */
+/* Allocata Dark Executive Purple Theme */
 
-@layer utilities {
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
+:root {
+  --bg-main: #0e081c;
+  --bg-sidebar: #150d28;
+  --bg-card: #1b1232;
+  --bg-card-hover: #231840;
+  --border-card: #2d1f50;
+  --border-light: rgba(255, 255, 255, 0.08);
+  --accent-purple: #9d50ff;
+  --accent-lavender: #b388ff;
+  --accent-amber: #f6ad55;
+  --accent-mint: #48bb78;
+  --accent-rose: #f56565;
+  --text-primary: #ffffff;
+  --text-secondary: #9f96b5;
+  --text-muted: #6f6585;
 }
 
-/* Custom Scrollbar for list container */
-#expenseListContainer::-webkit-scrollbar {
-  width: 5px;
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
-#expenseListContainer::-webkit-scrollbar-track {
-  background: transparent;
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-#expenseListContainer::-webkit-scrollbar-thumb {
-  background-color: rgba(156, 163, 175, 0.4);
+::-webkit-scrollbar-track {
+  background: #120b24;
+}
+::-webkit-scrollbar-thumb {
+  background: #312157;
   border-radius: 9999px;
 }
-
-/* Active and Inactive Desktop Tabs */
-.tab-btn.active-tab {
-  color: #4f46e5;
-  border-color: #4f46e5;
-}
-.dark .tab-btn.active-tab {
-  color: #818cf8;
-  border-color: #818cf8;
-}
-.tab-btn.inactive-tab {
-  color: #64748b;
-  border-color: transparent;
-}
-.dark .tab-btn.inactive-tab {
-  color: #94a3b8;
-  border-color: transparent;
-}
-.tab-btn.inactive-tab:hover {
-  color: #1e293b;
-  border-color: #cbd5e1;
-}
-.dark .tab-btn.inactive-tab:hover {
-  color: #f1f5f9;
-  border-color: #334155;
+::-webkit-scrollbar-thumb:hover {
+  background: #47327d;
 }
 
-/* Mobile Bottom Navigation active states */
-.mobile-tab-btn.active-m-tab {
-  color: #4f46e5;
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
-.dark .mobile-tab-btn.active-m-tab {
-  color: #818cf8;
-}
-.mobile-tab-btn.inactive-m-tab {
-  color: #94a3b8;
-}
-.dark .mobile-tab-btn.inactive-m-tab {
-  color: #64748b;
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Modal animation */
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-.animate-scale-in {
-  animation: scaleIn 0.15s ease-out forwards;
+/* Allocata Card Style */
+.alloc-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 1rem;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
-/* Mobile tap target improvement */
-button, input, select {
-  -webkit-tap-highlight-color: transparent;
+.alloc-card:hover {
+  border-color: rgba(157, 80, 255, 0.35);
+}
+
+/* Allocata Badge Styles */
+.badge-approved {
+  background-color: rgba(72, 187, 120, 0.15);
+  color: #48bb78;
+  border: 1px solid rgba(72, 187, 120, 0.3);
+}
+
+.badge-pending {
+  background-color: rgba(246, 173, 85, 0.15);
+  color: #f6ad55;
+  border: 1px solid rgba(246, 173, 85, 0.3);
+}
+
+.badge-rejected {
+  background-color: rgba(245, 101, 101, 0.15);
+  color: #f56565;
+  border: 1px solid rgba(245, 101, 101, 0.3);
+}
+
+.badge-purple {
+  background-color: rgba(157, 80, 255, 0.15);
+  color: #b388ff;
+  border: 1px solid rgba(157, 80, 255, 0.3);
+}
+
+/* Sidebar Active States */
+.sidebar-link {
+  color: var(--text-secondary);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+.sidebar-link:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+.sidebar-link.active-sidebar {
+  color: #ffffff;
+  background-color: rgba(157, 80, 255, 0.2);
+  border-left: 3px solid #9d50ff;
+  font-weight: 600;
+}
+
+/* Mobile Bottom Nav */
+.mobile-nav-btn {
+  color: #7b7194;
+  transition: color 0.2s ease, transform 0.15s ease;
+}
+.mobile-nav-btn.active-m-nav {
+  color: #b388ff;
+}
+.mobile-nav-btn:active {
+  transform: scale(0.92);
+}
+
+/* Allocata Gradient Accents */
+.alloc-gradient-text {
+  background: linear-gradient(135deg, #ffffff 0%, #d8b4fe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.alloc-brand-logo {
+  filter: drop-shadow(0 0 10px rgba(157, 80, 255, 0.5));
 }
