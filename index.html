@@ -164,14 +164,61 @@
     <main class="flex-1 p-4 sm:p-6 lg:p-8 pb-24 md:pb-8 max-w-7xl w-full mx-auto space-y-6">
 
       <!-- ==============================================
-           TAB 1: DASHBOARD & VISUALISASI (Allocata Style)
+           TAB 1: DASHBOARD & VISUALISASI ANALISIS (1Money / Allocata Style)
            ============================================== -->
       <div id="tabContent-dashboard" class="tab-panel space-y-6">
         
-        <!-- MOBILE TITLE -->
-        <div class="md:hidden">
-          <h2 class="text-lg font-bold text-white">Allocata - Dashboard</h2>
-          <p class="text-xs text-[#9f96b5]">Ringkasan modal dan realisasi pengeluaran</p>
+        <!-- HEADER ANALISIS & CYCLE NAVIGATOR (Matches Reference Screenshot) -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#2d1f50]/60">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-pink-500/20 to-purple-500/20 border border-pink-500/30 flex items-center justify-center text-pink-300 shadow-md">
+              <i data-lucide="book-open" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h2 class="text-lg sm:text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                Analisis
+              </h2>
+              <p class="text-xs text-[#9f96b5]">Distribusi Alokasi Dana & Realisasi Belanja</p>
+            </div>
+          </div>
+
+          <!-- Cycle / Period Navigator (e.g. < 9/2026 >) -->
+          <div class="inline-flex items-center gap-2 bg-[#150d28] border border-[#2d1f50] rounded-xl px-3 py-1.5 self-start sm:self-auto">
+            <button onclick="cycleNavPrev()" title="Siklus Sebelumnya" class="p-1 hover:text-white text-[#9f96b5] rounded-md hover:bg-white/5 transition">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <span id="analysisPeriodLabel" class="text-xs font-bold text-purple-200 min-w-[100px] text-center tracking-wide">
+              9/2026
+            </span>
+            <button onclick="cycleNavNext()" title="Siklus Berikutnya" class="p-1 hover:text-white text-[#9f96b5] rounded-md hover:bg-white/5 transition">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- PILL TABS: Pengeluaran | Penghasilan | Anggaran (Matches Screenshot) -->
+        <div class="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
+          <div class="inline-flex p-1 rounded-2xl bg-[#150d28] border border-[#2d1f50] text-xs">
+            <button type="button" id="tabAnalisisExpense" onclick="setAnalysisTab('expense')"
+              class="analisis-tab-pill analisis-tab-active px-4 py-2 rounded-xl text-xs flex items-center gap-1.5">
+              <span>Pengeluaran</span>
+            </button>
+            <button type="button" id="tabAnalisisIncome" onclick="setAnalysisTab('income')"
+              class="analisis-tab-pill analisis-tab-inactive px-4 py-2 rounded-xl text-xs flex items-center gap-1.5">
+              <span>Penghasilan</span>
+            </button>
+            <button type="button" id="tabAnalisisBudget" onclick="setAnalysisTab('budget')"
+              class="analisis-tab-pill analisis-tab-inactive px-4 py-2 rounded-xl text-xs flex items-center gap-1.5">
+              <span>Anggaran</span>
+            </button>
+          </div>
+
+          <!-- Secondary Sub-Filter Pills (Kategori | Akun | Anggota) -->
+          <div class="hidden sm:flex items-center gap-1 bg-[#150d28] border border-[#2d1f50] p-1 rounded-xl text-xs text-[#9f96b5]">
+            <span class="px-2.5 py-1 rounded-lg bg-purple-600/25 text-purple-200 font-semibold border border-purple-500/30">Kategori</span>
+            <span class="px-2 py-1 text-[#6f6585]">Akun</span>
+            <span class="px-2 py-1 text-[#6f6585]">Anggota</span>
+          </div>
         </div>
 
         <!-- TOP STAT CARDS (Matches Allocata Monitor & iPhone Mockups) -->
@@ -206,7 +253,7 @@
             </div>
           </div>
 
-          <!-- Card 3: Projected ROI / Batas Aman Harian -->
+          <!-- Card 3: Batas Aman Harian (Safe Spend) -->
           <div class="alloc-card p-5 relative overflow-hidden bg-gradient-to-br from-[#1b1232] to-[#251545]">
             <div class="flex justify-between items-start">
               <div>
@@ -221,59 +268,50 @@
           </div>
         </div>
 
-        <!-- CHARTS SECTION: Allocation Overview & Funding Funnel -->
+        <!-- MAIN ANALYSIS SECTION: MULTI-COLOR DONUT CHART & BREAKDOWN LIST -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          <!-- Bar Chart: Allocation Overview (7 Cols) -->
-          <div class="lg:col-span-7 alloc-card p-5 flex flex-col">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <h3 class="font-bold text-white text-base flex items-center gap-2">
-                  <i data-lucide="bar-chart-2" class="w-4 h-4 text-purple-400"></i>
-                  Allocation Overview
-                </h3>
-                <p class="text-xs text-[#9f96b5]">Alokasi Anggaran vs Realisasi per Pos</p>
-              </div>
-              <span class="text-[11px] font-semibold text-[#9f96b5] bg-[#231840] px-2.5 py-1 rounded-lg border border-[#2d1f50]">
-                Departments / Pos
-              </span>
+          <!-- Big Donut Chart with Center Amount (5 Cols) -->
+          <div class="lg:col-span-5 alloc-card p-5 flex flex-col items-center justify-between">
+            <div class="w-full flex items-center justify-between mb-2">
+              <span id="donutTabSubtitle" class="text-xs font-semibold text-purple-300">Diagram Proporsi</span>
+              <span class="text-[10px] text-purple-300 font-semibold bg-purple-900/30 px-2 py-0.5 rounded-md border border-purple-700/40">Multi-Warna & Emoticon</span>
             </div>
 
-            <div class="flex-1 flex flex-col justify-center min-h-[260px] sm:min-h-[290px]">
-              <canvas id="barChart"></canvas>
+            <!-- Donut Canvas & Central Text Overlay -->
+            <div class="relative w-full max-w-[280px] sm:max-w-[320px] aspect-square flex items-center justify-center my-2">
+              <canvas id="pieChart"></canvas>
+              <div id="chartCenterText" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
+                <span id="chartCenterLabel" class="text-xs text-[#9f96b5] font-medium tracking-wide">Pengeluaran</span>
+                <span id="chartCenterAmount" class="text-lg sm:text-2xl font-black text-white tracking-tight mt-0.5">Rp 0</span>
+              </div>
             </div>
+
+            <!-- Subtitle hint underneath chart (as seen in screenshot) -->
+            <p class="text-[11px] text-[#6f6585] mt-2 flex items-center gap-1.5 text-center">
+              <i data-lucide="rotate-cw" class="w-3.5 h-3.5 text-purple-400"></i>
+              <span>Seret diagram untuk memutar • Tiap pos memiliki warna & emoticon</span>
+            </p>
           </div>
 
-          <!-- Donut Chart: Funding Funnel / Proporsi (5 Cols) -->
-          <div class="lg:col-span-5 alloc-card p-5 flex flex-col">
-            <div class="flex items-center justify-between mb-4">
+          <!-- Category Breakdown List (7 Cols - Matches Screenshot List) -->
+          <div class="lg:col-span-7 alloc-card p-5 flex flex-col space-y-4">
+            <div class="flex items-center justify-between">
               <div>
-                <h3 class="font-bold text-white text-base flex items-center gap-2">
-                  <i data-lucide="pie-chart" class="w-4 h-4 text-purple-400"></i>
-                  Funding Funnel
+                <h3 id="breakdownSectionTitle" class="font-bold text-white text-base flex items-center gap-2">
+                  <i data-lucide="layers" class="w-4 h-4 text-purple-400"></i>
+                  Rincian Kategori Pengeluaran
                 </h3>
-                <p class="text-xs text-[#9f96b5]">Proporsi Alokasi Dana</p>
+                <p id="breakdownSectionSub" class="text-xs text-[#9f96b5]">Persentase & nominal tiap pos alokasi</p>
               </div>
-              
-              <div class="inline-flex rounded-lg bg-[#150d28] p-0.5 border border-[#2d1f50] text-xs">
-                <button id="btnChartAlloc" onclick="setChartMode('alloc')" class="px-2 py-0.5 rounded-md font-medium bg-purple-600 text-white">
-                  Rencana
-                </button>
-                <button id="btnChartReal" onclick="setChartMode('real')" class="px-2 py-0.5 rounded-md font-medium text-[#9f96b5]">
-                  Realisasi
-                </button>
-              </div>
+
+              <button onclick="switchTab('allocation')" class="text-xs text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1 transition">
+                Atur Pos <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+              </button>
             </div>
 
-            <div class="relative flex-1 flex items-center justify-center min-h-[240px]">
-              <canvas id="pieChart"></canvas>
-              <div id="chartCenterText" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-                <span class="text-[11px] text-[#9f96b5] font-medium">Total Pool</span>
-                <span id="chartCenterAmount" class="text-sm font-bold text-white">Rp 0</span>
-              </div>
-            </div>
-
-            <div id="chartLegendCustom" class="mt-4 pt-3 border-t border-[#2d1f50] flex flex-wrap gap-2 justify-center text-xs">
+            <!-- Category Breakdown Rows Container -->
+            <div id="analysisBreakdownContainer" class="flex-1 overflow-y-auto max-h-[460px] divide-y divide-[#2d1f50]/40 pr-1 space-y-1">
               <!-- Populated by JS -->
             </div>
           </div>
@@ -283,30 +321,35 @@
         <!-- DETAILED STATUS PER POS & QUICK REQUESTS TABLE -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          <!-- Category Status Bars (5 cols) -->
-          <div class="lg:col-span-5 alloc-card p-5">
+          <!-- Bar Chart (6 cols) -->
+          <div class="lg:col-span-6 alloc-card p-5 flex flex-col">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="font-bold text-white text-sm flex items-center gap-2">
-                <i data-lucide="layers" class="w-4 h-4 text-purple-400"></i>
-                Status Kuota Tiap Pos
-              </h3>
-              <span class="text-xs text-[#9f96b5]">Terpakai / Target</span>
+              <div>
+                <h3 class="font-bold text-white text-base flex items-center gap-2">
+                  <i data-lucide="bar-chart-2" class="w-4 h-4 text-purple-400"></i>
+                  Allocation Overview
+                </h3>
+                <p class="text-xs text-[#9f96b5]">Alokasi Anggaran vs Realisasi per Pos</p>
+              </div>
+              <span class="text-[11px] font-semibold text-[#9f96b5] bg-[#231840] px-2.5 py-1 rounded-lg border border-[#2d1f50]">
+                Perbandingan
+              </span>
             </div>
 
-            <div id="categoryCardsContainer" class="space-y-3">
-              <!-- Populated by JS -->
+            <div class="flex-1 flex flex-col justify-center min-h-[240px]">
+              <canvas id="barChart"></canvas>
             </div>
           </div>
 
-          <!-- Recent Capital Requests / Transaksi Table (7 cols) -->
-          <div class="lg:col-span-7 alloc-card p-5 flex flex-col">
+          <!-- Recent Capital Requests / Transaksi Table (6 cols) -->
+          <div class="lg:col-span-6 alloc-card p-5 flex flex-col">
             <div class="flex items-center justify-between mb-4">
               <div>
                 <h3 class="font-bold text-white text-sm flex items-center gap-2">
                   <i data-lucide="clock" class="w-4 h-4 text-purple-400"></i>
-                  Capital Requests (Recent)
+                  Transaksi Terbaru (Recent Requests)
                 </h3>
-                <p class="text-xs text-[#9f96b5]">Riwayat transaksi pengeluaran & pemasukan terbaru</p>
+                <p class="text-xs text-[#9f96b5]">Riwayat pengeluaran & pemasukan terbaru</p>
               </div>
 
               <button onclick="switchTab('expenses')" class="text-xs font-semibold text-purple-400 hover:text-purple-300 flex items-center gap-1 transition">
@@ -318,10 +361,9 @@
               <table class="w-full text-left text-xs">
                 <thead>
                   <tr class="text-[#9f96b5] border-b border-[#2d1f50]">
-                    <th class="pb-2.5 font-medium">Project / Kebutuhan</th>
+                    <th class="pb-2.5 font-medium">Kebutuhan</th>
                     <th class="pb-2.5 font-medium">Pos / Sumber</th>
                     <th class="pb-2.5 font-medium">Nominal</th>
-                    <th class="pb-2.5 font-medium">Status</th>
                     <th class="pb-2.5 font-medium text-right">Tanggal</th>
                   </tr>
                 </thead>
@@ -717,65 +759,104 @@
     </main>
 
     <!-- ==============================================
-         MOBILE BOTTOM NAVIGATION (Matches iPhone in Mockup)
+         MOBILE BOTTOM NAVIGATION (Matches Screenshot: Buku Kas, Dompet, Analisis, Lainnya)
          ============================================== -->
     <nav class="md:hidden fixed bottom-0 inset-x-0 bg-[#150d28]/95 backdrop-blur border-t border-[#2d1f50] z-40 py-1.5 px-4">
       <div class="grid grid-cols-4 gap-1">
-        <button onclick="switchTab('dashboard')" id="mNavBtn-dashboard" class="mobile-nav-btn active-m-nav flex flex-col items-center justify-center py-1">
-          <i data-lucide="home" class="w-5 h-5 mb-0.5"></i>
-          <span class="text-[10px] font-medium">Home</span>
-        </button>
         <button onclick="switchTab('expenses')" id="mNavBtn-expenses" class="mobile-nav-btn flex flex-col items-center justify-center py-1">
-          <i data-lucide="receipt" class="w-5 h-5 mb-0.5"></i>
-          <span class="text-[10px] font-medium">Requests</span>
+          <i data-lucide="book-open" class="w-5 h-5 mb-0.5"></i>
+          <span class="text-[10px] font-medium">Buku Kas</span>
         </button>
         <button onclick="switchTab('allocation')" id="mNavBtn-allocation" class="mobile-nav-btn flex flex-col items-center justify-center py-1">
-          <i data-lucide="folder-kanban" class="w-5 h-5 mb-0.5"></i>
-          <span class="text-[10px] font-medium">Projects</span>
+          <i data-lucide="wallet" class="w-5 h-5 mb-0.5"></i>
+          <span class="text-[10px] font-medium">Dompet</span>
+        </button>
+        <button onclick="switchTab('dashboard')" id="mNavBtn-dashboard" class="mobile-nav-btn active-m-nav flex flex-col items-center justify-center py-1">
+          <i data-lucide="pie-chart" class="w-5 h-5 mb-0.5"></i>
+          <span class="text-[10px] font-bold">Analisis</span>
         </button>
         <button onclick="switchTab('settings')" id="mNavBtn-settings" class="mobile-nav-btn flex flex-col items-center justify-center py-1">
-          <i data-lucide="settings" class="w-5 h-5 mb-0.5"></i>
-          <span class="text-[10px] font-medium">Settings</span>
+          <i data-lucide="more-horizontal" class="w-5 h-5 mb-0.5"></i>
+          <span class="text-[10px] font-medium">Lainnya</span>
         </button>
       </div>
     </nav>
 
   </div>
 
-  <!-- MODAL: ADD / EDIT CATEGORY -->
-  <div id="modalCategory" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="alloc-card max-w-sm w-full p-5 shadow-2xl border border-[#2d1f50] bg-[#1b1232]">
-      <h3 class="text-base font-bold text-white mb-3 flex items-center gap-2">
-        <i data-lucide="folder-plus" class="w-4 h-4 text-purple-400"></i> Tambah Pos Alokasi
-      </h3>
+  <!-- MODAL: ADD / EDIT CATEGORY (Adjustable Emoticon & Multi-Color) -->
+  <div id="modalCategory" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="alloc-card max-w-md w-full p-5 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="modalCategoryTitle" class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="folder-plus" class="w-4 h-4 text-purple-400"></i> Tambah Pos Alokasi
+        </h3>
+        <button onclick="closeCategoryModal()" class="text-[#9f96b5] hover:text-white transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
 
-      <div class="space-y-3.5">
+      <input type="hidden" id="catEditId" value="">
+
+      <div class="space-y-4">
+        <!-- Emoticon Selector -->
+        <div>
+          <label class="block text-xs font-semibold text-[#9f96b5] mb-1.5">Pilih Emoticon Standar</label>
+          
+          <!-- Emoticon quick grid -->
+          <div id="emojiPickerGrid" class="grid grid-cols-8 gap-1.5 mb-2.5">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Custom Emoji Input / Preview -->
+          <div class="flex items-center gap-2 p-2 rounded-xl bg-[#150d28] border border-[#2d1f50]">
+            <div id="catEmojiPreview" class="w-10 h-10 rounded-xl bg-[#231840] border border-purple-500/40 flex items-center justify-center text-xl shrink-0 shadow-inner">
+              🏠
+            </div>
+            <div class="flex-1">
+              <input type="text" id="catEmojiInput" maxlength="6" value="🏠" placeholder="🏠"
+                class="w-full px-3 py-1.5 text-sm bg-[#1b1232] border border-[#2d1f50] rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none text-white text-center font-bold"
+                oninput="onEmojiInputChanged(this.value)">
+            </div>
+            <span class="text-[10px] text-[#9f96b5] pr-1">Ketik emoticon bebas</span>
+          </div>
+        </div>
+
+        <!-- Nama Pos -->
         <div>
           <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Nama Pos (Department)</label>
-          <input type="text" id="catNameInput" placeholder="Contoh: Belanja Bulanan / Pulsa"
+          <input type="text" id="catNameInput" placeholder="Contoh: Makan & Harian / Kosan"
             class="w-full px-3 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white">
         </div>
 
+        <!-- Persentase Alokasi -->
         <div>
           <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Persentase Alokasi (%)</label>
-          <input type="number" id="catPercentInput" min="1" max="100" placeholder="15"
-            class="w-full px-3 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white">
+          <div class="relative">
+            <input type="number" id="catPercentInput" min="1" max="100" placeholder="20"
+              class="w-full pl-3 pr-8 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white font-semibold">
+            <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-xs font-bold text-[#9f96b5]">%</span>
+          </div>
         </div>
 
+        <!-- Warna Label (Multi-Color Palette) -->
         <div>
-          <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Warna Label</label>
+          <label class="block text-xs font-semibold text-[#9f96b5] mb-1.5">Warna Pos (Pilihan Beragam Warna)</label>
+          <div id="colorSwatchesGrid" class="flex flex-wrap items-center gap-2 mb-2">
+            <!-- Populated by JS -->
+          </div>
           <div class="flex items-center gap-2">
-            <input type="color" id="catColorInput" value="#b388ff" class="w-10 h-10 rounded-lg cursor-pointer border-0 bg-transparent">
-            <span class="text-xs text-[#9f96b5]">Pilih warna untuk grafik Allocata</span>
+            <input type="color" id="catColorInput" value="#38bdf8" class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent shrink-0" onchange="onCustomColorPick(this.value)">
+            <span class="text-xs text-[#9f96b5]">Pilih warna kustom sendiri</span>
           </div>
         </div>
       </div>
 
-      <div class="flex items-center justify-end gap-2 mt-5">
-        <button type="button" onclick="closeCategoryModal()" class="px-3 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition">
+      <div class="flex items-center justify-end gap-2 mt-6 pt-3 border-t border-[#2d1f50]">
+        <button type="button" onclick="closeCategoryModal()" class="px-3.5 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition">
           Batal
         </button>
-        <button type="button" onclick="saveCategoryModal()" class="px-4 py-2 text-xs font-semibold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30 transition">
+        <button type="button" onclick="saveCategoryModal()" class="px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30 transition">
           Simpan Pos
         </button>
       </div>
