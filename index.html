@@ -934,7 +934,7 @@
   </div>
 
   <!-- MODAL: SWITCH PROFILE (QUICK SWITCHER) -->
-  <div id="modalProfileSwitch" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+  <div id="modalProfileSwitch" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden" style="z-index: 60;">
     <div class="alloc-card max-w-md w-full p-5 sm:p-6 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[90vh] flex flex-col">
       <div class="flex items-center justify-between mb-3 shrink-0">
         <div>
@@ -966,7 +966,7 @@
   </div>
 
   <!-- MODAL: ADD / EDIT PROFILE -->
-  <div id="modalProfileEdit" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+  <div id="modalProfileEdit" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden" style="z-index: 60;">
     <div class="alloc-card max-w-md w-full p-5 sm:p-6 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-4">
         <h3 id="modalProfileEditTitle" class="text-base font-bold text-white flex items-center gap-2">
@@ -1185,7 +1185,7 @@
   </div>
 
   <!-- MODAL: VERIFY PASSWORD PROMPT -->
-  <div id="modalPasswordPrompt" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+  <div id="modalPasswordPrompt" class="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden" style="z-index: 70;">
     <div class="alloc-card max-w-sm w-full p-5 shadow-2xl border border-[#2d1f50] bg-[#1b1232] space-y-4">
       <div class="flex items-center justify-between">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
@@ -1231,6 +1231,109 @@
     </div>
   </div>
 
+  <!-- MODAL: PERINGATAN PROFIL BELUM BERPASSWORD -->
+  <div id="modalUnprotectedProfile" class="fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 hidden" style="z-index: 70;">
+    <div class="alloc-card max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-amber-500/40 bg-[#1b1232] space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i> Peringatan Akses Profil
+        </h3>
+        <button onclick="closeUnprotectedProfileModal()" class="text-[#9f96b5] hover:text-white transition p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-3 p-3 rounded-xl bg-[#150d28] border border-[#2d1f50]">
+        <div id="unprotectedAvatar" class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0">
+          HR
+        </div>
+        <div class="min-w-0">
+          <p id="unprotectedName" class="font-bold text-white text-sm truncate">Haryo Seno</p>
+          <span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 w-fit mt-0.5">
+            <i data-lucide="unlock" class="w-2.5 h-2.5"></i> Belum Dilindungi PIN
+          </span>
+        </div>
+      </div>
+
+      <p class="text-xs text-[#b8afce] leading-relaxed">
+        Profil ini <strong>belum memiliki password / PIN</strong>. Siapa pun di perangkat ini dapat membuka dan melihat isi catatan keuangan profil ini sesuka hati.
+      </p>
+
+      <div class="space-y-2 pt-1">
+        <button type="button" onclick="onProceedToSetPinForUnprotected()" class="w-full py-2.5 px-4 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2">
+          <i data-lucide="lock" class="w-4 h-4"></i> Pasang PIN Sekarang (Disarankan)
+        </button>
+        <button type="button" onclick="onProceedSwitchWithoutPin()" class="w-full py-2 px-3 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition flex items-center justify-center gap-1.5">
+          <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i> Tetap Masuk Tanpa PIN
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: QUICK SET PIN -->
+  <div id="modalQuickSetPin" class="fixed inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 hidden" style="z-index: 70;">
+    <div class="alloc-card max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-purple-500/40 bg-[#1b1232] space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="shield" class="w-4 h-4 text-purple-400"></i> Pasang PIN Pengaman
+        </h3>
+        <button onclick="closeQuickSetPinModal()" class="text-[#9f96b5] hover:text-white transition p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-3 p-3 rounded-xl bg-[#150d28] border border-[#2d1f50]">
+        <div id="quickPinAvatar" class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0">
+          HR
+        </div>
+        <div class="min-w-0">
+          <p id="quickPinTargetName" class="font-bold text-white text-sm truncate">Haryo Seno</p>
+          <p class="text-[11px] text-[#9f96b5]">Kunci profil dengan PIN atau Password</p>
+        </div>
+      </div>
+
+      <form onsubmit="event.preventDefault(); submitQuickSetPin();" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-[#9f96b5] mb-1">PIN / Password Baru:</label>
+          <div class="relative">
+            <input type="password" id="quickPinInput" placeholder="Masukkan PIN (misal: 1234)"
+              class="w-full px-4 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider font-bold"
+              autocomplete="new-password">
+            <button type="button" onclick="togglePasswordVisibility('quickPinInput', this)" class="absolute right-3 top-2.5 text-[#9f96b5] hover:text-white transition">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Konfirmasi PIN Baru:</label>
+          <div class="relative">
+            <input type="password" id="quickPinConfirmInput" placeholder="Ulangi PIN baru"
+              class="w-full px-4 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider font-bold"
+              autocomplete="new-password">
+            <button type="button" onclick="togglePasswordVisibility('quickPinConfirmInput', this)" class="absolute right-3 top-2.5 text-[#9f96b5] hover:text-white transition">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <p id="quickPinError" class="text-xs text-rose-400 font-medium hidden flex items-center gap-1">
+          <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+          <span id="quickPinErrorText">Konfirmasi PIN tidak cocok!</span>
+        </p>
+
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <button type="button" onclick="closeQuickSetPinModal()" class="px-3.5 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition">
+            Batal
+          </button>
+          <button type="submit" class="px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30 transition flex items-center gap-1.5">
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i> Simpan & Kunci Profil
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: HELP & CROSS-DEVICE ACCESS -->
   <div id="modalHelp" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 hidden">
     <div class="alloc-card max-w-md w-full p-5 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[90vh] overflow-y-auto">
@@ -1267,6 +1370,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.5"></script>
+  <script src="app.js?v=2.6"></script>
 </body>
 </html>

@@ -1897,12 +1897,12 @@ async function submitLockScreenUnlock() {
 function lockCurrentProfile() {
   const active = getActiveProfile();
   if (!active.passwordHash) {
-    alert(`Profil "${active.name}" belum memiliki password.\nSilakan atur password di menu Edit Profil terlebih dahulu.`);
+    openQuickSetPinModal(active.id);
     return;
   }
   lockProfileSession(active.id);
   checkLockScreenState();
-  showToast(`Profil "${active.name}" berhasil dikunci`);
+  showToast(`Profil "${active.name}" berhasil dikunci 🔒`);
 }
 
 function openProfileSwitchModalFromLock() {
@@ -1977,6 +1977,10 @@ async function submitPasswordPrompt() {
 
   const inputHash = await hashPassword(pass);
   if (inputHash === targetProf.passwordHash) {
+    // Kunci sesi profil sebelumnya agar tidak bisa disusupi
+    if (state.activeProfileId && state.activeProfileId !== targetProf.id) {
+      lockProfileSession(state.activeProfileId);
+    }
     unlockProfileSession(targetProf.id);
     const action = { ...pendingAuthAction };
     closePasswordPromptModal();
@@ -2002,20 +2006,180 @@ async function submitPasswordPrompt() {
   }
 }
 
+// ==========================================
+// UNPROTECTED PROFILE WARNING MODAL
+// ==========================================
+let pendingUnprotectedProfileId = null;
+
+function openUnprotectedProfileModal(profileId) {
+  const targetProf = state.profiles.find(p => p.id === profileId);
+  if (!targetProf) return;
+
+  pendingUnprotectedProfileId = profileId;
+  const modal = document.getElementById('modalUnprotectedProfile');
+  const avatarEl = document.getElementById('unprotectedAvatar');
+  const nameEl = document.getElementById('unprotectedName');
+
+  if (avatarEl) {
+    avatarEl.innerText = targetProf.avatar || '👤';
+    const color = targetProf.color || '#9d50ff';
+    avatarEl.style.backgroundColor = hexToRgba(color, 0.2);
+    avatarEl.style.borderColor = hexToRgba(color, 0.5);
+    avatarEl.style.color = color;
+  }
+  if (nameEl) nameEl.innerText = targetProf.name;
+
+  modal?.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeUnprotectedProfileModal() {
+  pendingUnprotectedProfileId = null;
+  document.getElementById('modalUnprotectedProfile')?.classList.add('hidden');
+}
+
+function onProceedToSetPinForUnprotected() {
+  const profId = pendingUnprotectedProfileId;
+  closeUnprotectedProfileModal();
+  if (profId) {
+    openQuickSetPinModal(profId);
+  }
+}
+
+function onProceedSwitchWithoutPin() {
+  const profId = pendingUnprotectedProfileId;
+  closeUnprotectedProfileModal();
+  if (profId) {
+    doSwitchProfile(profId);
+  }
+}
+
+// ==========================================
+// QUICK SET PIN MODAL
+// ==========================================
+let pendingQuickPinProfileId = null;
+
+function openQuickSetPinModal(profileId) {
+  const targetProf = state.profiles.find(p => p.id === profileId);
+  if (!targetProf) return;
+
+  pendingQuickPinProfileId = profileId;
+  const modal = document.getElementById('modalQuickSetPin');
+  const avatarEl = document.getElementById('quickPinAvatar');
+  const nameEl = document.getElementById('quickPinTargetName');
+  const inputEl = document.getElementById('quickPinInput');
+  const confirmEl = document.getElementById('quickPinConfirmInput');
+  const errEl = document.getElementById('quickPinError');
+
+  if (avatarEl) {
+    avatarEl.innerText = targetProf.avatar || '👤';
+    const color = targetProf.color || '#9d50ff';
+    avatarEl.style.backgroundColor = hexToRgba(color, 0.2);
+    avatarEl.style.borderColor = hexToRgba(color, 0.5);
+    avatarEl.style.color = color;
+  }
+  if (nameEl) nameEl.innerText = targetProf.name;
+  if (inputEl) inputEl.value = '';
+  if (confirmEl) confirmEl.value = '';
+  if (errEl) errEl.classList.add('hidden');
+
+  modal?.classList.remove('hidden');
+  setTimeout(() => inputEl?.focus(), 150);
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeQuickSetPinModal() {
+  pendingQuickPinProfileId = null;
+  document.getElementById('modalQuickSetPin')?.classList.add('hidden');
+}
+
+async function submitQuickSetPin() {
+  if (!pendingQuickPinProfileId) return;
+  const targetProf = state.profiles.find(p => p.id === pendingQuickPinProfileId);
+  if (!targetProf) {
+    closeQuickSetPinModal();
+    return;
+  }
+
+  const inputEl = document.getElementById('quickPinInput');
+  const confirmEl = document.getElementById('quickPinConfirmInput');
+  const errEl = document.getElementById('quickPinError');
+  const errText = document.getElementById('quickPinErrorText');
+
+  const pin = inputEl?.value?.trim() || '';
+  const confirm = confirmEl?.value?.trim() || '';
+
+  if (!pin) {
+    if (errEl && errText) {
+      errText.innerText = 'PIN/Password tidak boleh kosong!';
+      errEl.classList.remove('hidden');
+    }
+    inputEl?.focus();
+    return;
+  }
+
+  if (pin !== confirm) {
+    if (errEl && errText) {
+      errText.innerText = 'Konfirmasi PIN tidak cocok!';
+      errEl.classList.remove('hidden');
+    }
+    confirmEl?.focus();
+    return;
+  }
+
+  const hash = await hashPassword(pin);
+  targetProf.passwordHash = hash;
+  unlockProfileSession(targetProf.id);
+
+  if (state.activeProfileId === targetProf.id) {
+    syncStateToActiveProfile();
+  }
+
+  saveState();
+  closeQuickSetPinModal();
+  closeProfileSwitchModal();
+
+  if (state.activeProfileId !== targetProf.id) {
+    doSwitchProfile(targetProf.id);
+  } else {
+    updateUI();
+    checkLockScreenState();
+  }
+
+  showToast(`Profil "${targetProf.name}" berhasil diamankan dengan PIN! 🔒`);
+}
+
 function switchProfile(profileId) {
   const target = state.profiles.find(p => p.id === profileId);
   if (!target) return;
 
-  if (isProfileLocked(target)) {
-    closeProfileSwitchModal();
+  // Jika memilih profil yang sedang aktif
+  if (target.id === state.activeProfileId) {
+    if (isProfileLocked(target)) {
+      closeProfileSwitchModal();
+      checkLockScreenState();
+    } else {
+      closeProfileSwitchModal();
+    }
+    return;
+  }
+
+  // Jika profil target dilindungi password: WAJIB verifikasi password setiap kali beralih!
+  if (target.passwordHash) {
     openPasswordPromptModal({ type: 'switch', profileId });
     return;
   }
 
-  doSwitchProfile(profileId);
+  // Jika profil target belum dilindungi password: beri peringatan & opsi pasang PIN
+  openUnprotectedProfileModal(profileId);
 }
 
 function doSwitchProfile(profileId) {
+  // Selalu kunci sesi profil sebelumnya saat meninggalkan akun
+  if (state.activeProfileId && state.activeProfileId !== profileId) {
+    lockProfileSession(state.activeProfileId);
+  }
+
   syncStateToActiveProfile();
   const target = state.profiles.find(p => p.id === profileId);
   if (!target) return;
@@ -2023,6 +2187,7 @@ function doSwitchProfile(profileId) {
   syncProfileToState(state, target);
   saveState();
   closeProfileSwitchModal();
+  closeUnprotectedProfileModal();
   updateUI();
   checkLockScreenState();
   showToast(`Beralih ke profil "${target.name}"`);
@@ -2108,7 +2273,7 @@ function deleteProfile(profileId) {
   const prof = state.profiles.find(p => p.id === profileId);
   if (!prof) return;
 
-  if (isProfileLocked(prof)) {
+  if (prof.passwordHash) {
     closeProfileSwitchModal();
     openPasswordPromptModal({ type: 'delete', profileId });
     return;
@@ -2162,11 +2327,10 @@ function renderProfileSwitchModal() {
     const color = prof.color || '#9d50ff';
     const bgRgba = hexToRgba(color, 0.18);
     const borderRgba = hexToRgba(color, 0.45);
-    const isLocked = isProfileLocked(prof);
 
     const passBadge = prof.passwordHash
-      ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1 shrink-0"><i data-lucide="lock" class="w-3 h-3 text-rose-400"></i> ${isLocked ? 'Terkunci' : 'Terbuka'}</span>`
-      : `<span class="text-[10px] px-1.5 py-0.5 rounded-full text-[#6f6585] border border-[#2d1f50] flex items-center gap-1 shrink-0"><i data-lucide="unlock" class="w-3 h-3"></i> Bebas</span>`;
+      ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1 shrink-0"><i data-lucide="lock" class="w-3 h-3 text-rose-400"></i> Dilindungi PIN</span>`
+      : `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 shrink-0"><i data-lucide="alert-triangle" class="w-3 h-3 text-amber-400"></i> Belum Ber-PIN</span>`;
 
     return `
       <div class="p-3.5 rounded-2xl border ${isActive ? 'border-purple-500 bg-[#241744] shadow-lg shadow-purple-950/40' : 'border-[#2d1f50] bg-[#150d28] hover:bg-[#1f153a]'} transition flex items-center justify-between gap-3 cursor-pointer group" onclick="switchProfile('${prof.id}')">
@@ -2177,7 +2341,7 @@ function renderProfileSwitchModal() {
             ${prof.passwordHash ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px]"><i data-lucide="lock" class="w-2.5 h-2.5"></i></span>` : ''}
           </div>
           <div class="min-w-0">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <p class="font-bold text-white text-sm truncate">${escapeHtml(prof.name)}</p>
               ${isActive ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktif</span>` : ''}
               ${passBadge}
@@ -2188,6 +2352,11 @@ function renderProfileSwitchModal() {
         </div>
 
         <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+          ${!prof.passwordHash ? `
+            <button onclick="openQuickSetPinModal('${prof.id}')" title="Pasang PIN Pengaman" class="p-1.5 px-2 text-[11px] font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl transition flex items-center gap-1">
+              <i data-lucide="key" class="w-3 h-3"></i> <span class="hidden sm:inline">Pasang PIN</span>
+            </button>
+          ` : ''}
           <button onclick="openProfileEditModal('${prof.id}')" title="Edit Profil" class="p-2 text-[#9f96b5] hover:text-white rounded-xl hover:bg-white/10 transition">
             <i data-lucide="edit-3" class="w-4 h-4"></i>
           </button>
@@ -2239,7 +2408,7 @@ function openProfileEditModal(profileId, isVerified = false) {
     const prof = state.profiles.find(p => p.id === profileId);
     if (!prof) return;
 
-    if (!isVerified && isProfileLocked(prof)) {
+    if (!isVerified && prof.passwordHash) {
       openPasswordPromptModal({ type: 'edit', profileId });
       return;
     }
@@ -2416,6 +2585,12 @@ async function saveProfileModal() {
         return;
       }
       passwordHash = await hashPassword(pass.trim());
+    } else {
+      const proceed = confirm('Profil baru ini belum diberi PIN/Password.\n\nPengguna lain di perangkat ini dapat membukanya secara bebas tanpa password.\n\nApakah yakin ingin membuat profil tanpa password?');
+      if (!proceed) {
+        document.getElementById('profPassInput')?.focus();
+        return;
+      }
     }
 
     createProfile(name, role, avatar, color, capital, templateKey, passwordHash);
@@ -2465,15 +2640,21 @@ function renderProfileElements() {
   }
   if (deskName) deskName.innerText = active.name;
 
-  // Lock buttons: show if active profile has password set
+  // Lock buttons: selalu tampil agar user tahu status keamanan profil
   const hasPass = Boolean(active.passwordHash);
   const sideLockBtn = document.getElementById('sideLockBtn');
   const headerLockBtn = document.getElementById('headerLockBtn');
   const mobileLockBtn = document.getElementById('mobileLockBtn');
   [sideLockBtn, headerLockBtn, mobileLockBtn].forEach(btn => {
     if (btn) {
-      if (hasPass) btn.classList.remove('hidden');
-      else btn.classList.add('hidden');
+      btn.classList.remove('hidden');
+      if (hasPass) {
+        btn.title = 'Kunci Profil Ini Sekarang';
+        btn.innerHTML = '<i data-lucide="lock" class="w-4 h-4 text-purple-300"></i>';
+      } else {
+        btn.title = 'Pasang PIN Pengaman Profil';
+        btn.innerHTML = '<i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i>';
+      }
     }
   });
 
@@ -2492,11 +2673,10 @@ function renderProfileManager() {
     const color = prof.color || '#9d50ff';
     const bgRgba = hexToRgba(color, 0.15);
     const borderRgba = hexToRgba(color, 0.4);
-    const isLocked = isProfileLocked(prof);
 
     const passBadge = prof.passwordHash
-      ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1 shrink-0"><i data-lucide="lock" class="w-3 h-3 text-rose-400"></i> ${isLocked ? 'Terkunci' : 'Terbuka'}</span>`
-      : `<span class="text-[10px] px-2 py-0.5 rounded-full text-[#6f6585] border border-[#2d1f50] flex items-center gap-1 shrink-0"><i data-lucide="unlock" class="w-3 h-3"></i> Bebas</span>`;
+      ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1 shrink-0"><i data-lucide="lock" class="w-3 h-3 text-rose-400"></i> Dilindungi PIN</span>`
+      : `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 shrink-0"><i data-lucide="alert-triangle" class="w-3 h-3 text-amber-400"></i> Belum Ber-PIN</span>`;
 
     return `
       <div class="p-4 rounded-xl border ${isActive ? 'border-purple-500/80 bg-[#1e1438] shadow-lg shadow-purple-900/20' : 'border-[#2d1f50] bg-[#150d28] hover:bg-[#1b1232]'} transition flex flex-col justify-between gap-3">
@@ -2518,6 +2698,11 @@ function renderProfileManager() {
           </div>
 
           <div class="flex items-center gap-1">
+            ${!prof.passwordHash ? `
+              <button onclick="openQuickSetPinModal('${prof.id}')" title="Pasang PIN Pengaman" class="p-1.5 text-amber-400 hover:text-amber-300 rounded-lg hover:bg-amber-500/10 transition">
+                <i data-lucide="key" class="w-4 h-4"></i>
+              </button>
+            ` : ''}
             <button onclick="openProfileEditModal('${prof.id}')" title="Edit Profil" class="p-1.5 text-[#9f96b5] hover:text-white rounded-lg hover:bg-white/5 transition">
               <i data-lucide="edit-3" class="w-4 h-4"></i>
             </button>
