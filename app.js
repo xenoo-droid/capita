@@ -1,6 +1,6 @@
 /**
  * Allocata - Capital Allocation Dashboard & Money Management
- * Executive Obsidian Purple Theme with 1Money/Analisis Multi-Color Emoticon Dashboard
+ * Executive Obsidian Purple Theme with Nominal-First Category Allocation
  */
 
 const todayIso = new Date().toISOString().split('T')[0];
@@ -28,7 +28,7 @@ const STANDARD_EMOJIS = [
   '🍕', '✈️', '💻', '🏖️', '🏋️', '🐱', '🚌', '🔧'
 ];
 
-// Default State with Multi-Colored Emojis
+// Default State with Nominal-First Categories
 const DEFAULT_STATE = {
   capital: 1500000,
   cycle: {
@@ -40,11 +40,11 @@ const DEFAULT_STATE = {
     customStartDate: todayIso
   },
   categories: [
-    { id: 'cat-needs', name: 'Kosan & Tempat Tinggal', percent: 35, color: '#f87171', emoji: '🏠' },
-    { id: 'cat-daily', name: 'Makan & Harian', percent: 30, color: '#fbbf24', emoji: '🍜' },
-    { id: 'cat-study', name: 'Kuliah, Kuota & Buku', percent: 15, color: '#38bdf8', emoji: '📚' },
-    { id: 'cat-wants', name: 'Nongkrong & Hiburan', percent: 10, color: '#a78bfa', emoji: '☕' },
-    { id: 'cat-save', name: 'Tabungan & Dana Darurat', percent: 10, color: '#34d399', emoji: '💰' }
+    { id: 'cat-needs', name: 'Kosan', targetAmount: 500000, color: '#f87171', emoji: '🏠' },
+    { id: 'cat-daily', name: 'Makan & Harian', targetAmount: 450000, color: '#fbbf24', emoji: '🍜' },
+    { id: 'cat-study', name: 'Kebutuhan Kuliah', targetAmount: 250000, color: '#38bdf8', emoji: '📚' },
+    { id: 'cat-wants', name: 'Nongkrong & Hiburan', targetAmount: 150000, color: '#a78bfa', emoji: '☕' },
+    { id: 'cat-save', name: 'Tabungan & Dana Darurat', targetAmount: 150000, color: '#34d399', emoji: '💰' }
   ],
   expenses: [
     { id: 'exp-1', amount: 25000, categoryId: 'cat-daily', note: 'Makan Siang Nasi Padang', date: todayIso },
@@ -92,11 +92,17 @@ function loadState() {
       if (!loaded.analysisTab) loaded.analysisTab = 'expense';
       if (loaded.cycleOffset === undefined) loaded.cycleOffset = 0;
 
-      // Ensure every category has an emoji & distinct vibrant color
+      const cap = Number(loaded.capital) || 1500000;
+
+      // Ensure every category has emoji, distinct color, and targetAmount (Rp)
       if (Array.isArray(loaded.categories)) {
         loaded.categories.forEach((cat, idx) => {
           if (!cat.emoji) cat.emoji = getCategoryEmojiFallback(cat);
           if (!cat.color) cat.color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
+          // Backward compatibility: migrate percent to targetAmount if targetAmount missing
+          if (cat.targetAmount === undefined || cat.targetAmount === null || isNaN(cat.targetAmount)) {
+            cat.targetAmount = Math.round(cap * ((cat.percent || 20) / 100));
+          }
         });
       }
 
@@ -242,16 +248,28 @@ function getCurrentCycleIncomes() {
   });
 }
 
-// Dynamic Allocation Budget Calculation
+// ==========================================
+// NOMINAL-FIRST BUDGET & AUTO-PERCENTAGE CALCULATION
+// ==========================================
+
 function getCategoryBudgets(currentIncomes) {
-  const baseCapital = Number(state.capital) || 0;
+  // 1. Total nominal Rupiah dari seluruh pos alokasi
+  const totalBasePos = state.categories.reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
   
-  // Proportional income
+  // Jika state.capital belum diatur atau lebih kecil dari total pos, sesuaikan dengan totalBasePos
+  const baseCapital = Math.max(Number(state.capital) || 0, totalBasePos);
+
+  // 2. Persentase otomatis dihitung berdasarkan proporsi nominal pos
+  state.categories.forEach(cat => {
+    cat.percent = totalBasePos > 0 ? Math.round(((Number(cat.targetAmount) || 0) / totalBasePos) * 100) : 0;
+  });
+
+  // Pemasukan proporsional (dibagi rata ke semua pos sesuai bobot nominalnya)
   const propIncome = (currentIncomes || [])
     .filter(inc => inc.allocMode === 'proportional')
     .reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
 
-  // Direct category income
+  // Pemasukan langsung ke pos spesifik
   const directMap = {};
   state.categories.forEach(c => directMap[c.id] = 0);
   (currentIncomes || [])
@@ -262,15 +280,16 @@ function getCategoryBudgets(currentIncomes) {
 
   const budgets = {};
   state.categories.forEach(cat => {
-    const fromBaseAndProp = Math.round((baseCapital + propIncome) * (cat.percent / 100));
-    const fromDirect = directMap[cat.id] || 0;
-    budgets[cat.id] = fromBaseAndProp + fromDirect;
+    const baseTarget = Number(cat.targetAmount) || 0;
+    const propShare = totalBasePos > 0 ? Math.round(propIncome * (baseTarget / totalBasePos)) : 0;
+    const directShare = directMap[cat.id] || 0;
+    budgets[cat.id] = baseTarget + propShare + directShare;
   });
 
   const totalExtra = (currentIncomes || []).reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
   const totalEffective = baseCapital + totalExtra;
 
-  return { budgets, baseCapital, totalExtra, totalEffective, propIncome, directMap };
+  return { budgets, baseCapital, totalBasePos, totalExtra, totalEffective, propIncome, directMap };
 }
 
 // ==========================================
@@ -316,7 +335,6 @@ function updateUI() {
   const budgetInfo = getCategoryBudgets(currentIncomes);
 
   const totalSpent = currentExpenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const totalIncome = currentIncomes.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const effectiveCapital = budgetInfo.totalEffective;
   const remaining = effectiveCapital - totalSpent;
   const spentPct = effectiveCapital > 0 ? Math.round((totalSpent / effectiveCapital) * 100) : 0;
@@ -369,7 +387,7 @@ function updateUI() {
   // Render Multi-Color Donut & Overview Charts
   renderCharts(currentExpenses, currentIncomes, budgetInfo);
 
-  // Render Screenshot-Style Category Breakdown List
+  // Render Category Breakdown List
   renderAnalysisBreakdown(currentExpenses, currentIncomes, budgetInfo);
 
   // Category selects in forms
@@ -387,7 +405,7 @@ function updateUI() {
   ].sort((a, b) => new Date(b.date) - new Date(a.date));
   renderDesktopRecentTable(allTx, catMap);
 
-  // Allocation table in Projects Tab
+  // Allocation table in Dompet/Projects Tab (Nominal-First)
   renderAllocationTable();
 
   // Settings inputs
@@ -400,7 +418,7 @@ function updateUI() {
 }
 
 // ==========================================
-// CHARTS (DONUT MULTI-WARNA & BAR CHART)
+// CHARTS (DONUT MULTI-WARNA DENGAN EMOTE)
 // ==========================================
 
 function getCategorySpentMap(expensesList) {
@@ -495,7 +513,6 @@ function renderCharts(currentExpenses, currentIncomes, budgetInfo) {
     centerLabelText = 'Pengeluaran';
     centerTotalAmount = currentExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     
-    // Show all categories with spent amounts
     state.categories.forEach(cat => {
       const spent = spentMap[cat.id] || 0;
       if (spent > 0 || state.categories.length <= 5) {
@@ -688,8 +705,6 @@ function renderAnalysisBreakdown(currentExpenses, currentIncomes, budgetInfo) {
     if (sectionSub) sectionSub.innerText = `Persentase & jumlah uang yang dibelanjakan`;
 
     const totalSpent = currentExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-
-    // Sort categories by spent descending
     const sorted = [...state.categories].sort((a, b) => (spentMap[b.id] || 0) - (spentMap[a.id] || 0));
 
     if (totalSpent === 0) {
@@ -716,13 +731,10 @@ function renderAnalysisBreakdown(currentExpenses, currentIncomes, budgetInfo) {
       return `
         <div class="flex items-center justify-between py-3 px-2 hover:bg-white/[0.03] rounded-xl transition group">
           <div class="flex items-center gap-3 min-w-0">
-            <!-- Colored dot (matching slice) -->
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${cat.color}"></span>
-            <!-- Emoji Avatar Badge -->
             <div class="w-9 h-9 rounded-xl flex items-center justify-center text-lg bg-[#231840] border border-[#2d1f50] shrink-0 group-hover:border-purple-500/50 transition shadow-inner">
               ${cat.emoji}
             </div>
-            <!-- Name & Subtext -->
             <div class="truncate">
               <p class="font-bold text-sm text-white truncate group-hover:text-purple-300 transition">${escapeHtml(cat.name)}</p>
               <p class="text-[11px] text-[#9f96b5] truncate">${subText}</p>
@@ -730,9 +742,7 @@ function renderAnalysisBreakdown(currentExpenses, currentIncomes, budgetInfo) {
           </div>
 
           <div class="flex items-center gap-3 sm:gap-6 shrink-0 text-right">
-            <!-- Percentage -->
             <span class="text-xs sm:text-sm font-semibold text-[#9f96b5] w-10 text-right">${pct}%</span>
-            <!-- Nominal IDR -->
             <span class="font-extrabold text-sm sm:text-base text-white min-w-[95px] text-right">${formatIDR(spent)}</span>
           </div>
         </div>
@@ -789,11 +799,11 @@ function renderAnalysisBreakdown(currentExpenses, currentIncomes, budgetInfo) {
     if (sectionTitle) sectionTitle.innerHTML = `<i data-lucide="pie-chart" class="w-4 h-4 text-purple-400"></i> Rincian Alokasi Anggaran`;
     if (sectionSub) sectionSub.innerText = `Target proporsi formula pembagian dana kamu`;
 
-    const totalCapital = budgetInfo.totalEffective;
+    const totalBasePos = state.categories.reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
 
     container.innerHTML = state.categories.map(cat => {
       const budget = budgetInfo.budgets[cat.id] || 0;
-      const pct = cat.percent;
+      const pct = totalBasePos > 0 ? Math.round(((Number(cat.targetAmount) || 0) / totalBasePos) * 100) : 0;
 
       return `
         <div class="flex items-center justify-between py-3 px-2 hover:bg-white/[0.03] rounded-xl transition group">
@@ -804,7 +814,7 @@ function renderAnalysisBreakdown(currentExpenses, currentIncomes, budgetInfo) {
             </div>
             <div class="truncate">
               <p class="font-bold text-sm text-white truncate group-hover:text-purple-300 transition">${escapeHtml(cat.name)}</p>
-              <p class="text-[11px] text-[#9f96b5] truncate">Formula Alokasi: ${pct}%</p>
+              <p class="text-[11px] text-[#9f96b5] truncate">Proporsi: ${pct}%</p>
             </div>
           </div>
 
@@ -1149,7 +1159,7 @@ function renderTransactionList() {
 }
 
 // ==========================================
-// ALLOCATION EDITOR, EMOJIS & PRESETS
+// ALLOCATION EDITOR (NOMINAL-FIRST & AUTO-PERCENTAGE)
 // ==========================================
 
 function onCapitalChanged(val) {
@@ -1167,29 +1177,37 @@ function setQuickCapital(val) {
   updateUI();
 }
 
+function syncCapitalWithTotalPos() {
+  const totalBasePos = state.categories.reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
+  state.capital = totalBasePos;
+  saveState();
+  updateUI();
+}
+
 function applyPreset(presetKey) {
+  const cap = Number(state.capital) || 1500000;
   const presets = {
     standard_student: [
-      { id: 'cat-needs', name: 'Kosan & Tempat Tinggal', percent: 35, color: '#f87171', emoji: '🏠' },
-      { id: 'cat-daily', name: 'Makan & Kebutuhan Harian', percent: 30, color: '#fbbf24', emoji: '🍜' },
-      { id: 'cat-study', name: 'Kuliah, Kuota & Buku', percent: 15, color: '#38bdf8', emoji: '📚' },
-      { id: 'cat-wants', name: 'Nongkrong & Hiburan', percent: 10, color: '#a78bfa', emoji: '☕' },
-      { id: 'cat-save', name: 'Tabungan & Dana Darurat', percent: 10, color: '#34d399', emoji: '💰' }
+      { id: 'cat-needs', name: 'Kosan', targetAmount: Math.round(cap * 0.35), color: '#f87171', emoji: '🏠' },
+      { id: 'cat-daily', name: 'Makan & Harian', targetAmount: Math.round(cap * 0.30), color: '#fbbf24', emoji: '🍜' },
+      { id: 'cat-study', name: 'Kebutuhan Kuliah', targetAmount: Math.round(cap * 0.15), color: '#38bdf8', emoji: '📚' },
+      { id: 'cat-wants', name: 'Nongkrong & Hiburan', targetAmount: Math.round(cap * 0.10), color: '#a78bfa', emoji: '☕' },
+      { id: 'cat-save', name: 'Tabungan & Dana Darurat', targetAmount: Math.round(cap * 0.10), color: '#34d399', emoji: '💰' }
     ],
     rule_50_30_20: [
-      { id: 'cat-needs', name: 'Needs / Kebutuhan Pokok', percent: 50, color: '#38bdf8', emoji: '🏠' },
-      { id: 'cat-wants', name: 'Wants / Hiburan & Nongkrong', percent: 30, color: '#f472b6', emoji: '☕' },
-      { id: 'cat-save', name: 'Savings / Tabungan Masa Depan', percent: 20, color: '#34d399', emoji: '💰' }
+      { id: 'cat-needs', name: 'Needs / Kebutuhan Pokok', targetAmount: Math.round(cap * 0.50), color: '#38bdf8', emoji: '🏠' },
+      { id: 'cat-wants', name: 'Wants / Hiburan & Nongkrong', targetAmount: Math.round(cap * 0.30), color: '#f472b6', emoji: '☕' },
+      { id: 'cat-save', name: 'Savings / Tabungan Masa Depan', targetAmount: Math.round(cap * 0.20), color: '#34d399', emoji: '💰' }
     ],
     frugal: [
-      { id: 'cat-daily', name: 'Makan Pokok (Mode Hemat)', percent: 65, color: '#fbbf24', emoji: '🍜' },
-      { id: 'cat-transport', name: 'Transport & Bensin', percent: 10, color: '#38bdf8', emoji: '🛵' },
-      { id: 'cat-save', name: 'Dana Darurat & Tabungan', percent: 25, color: '#34d399', emoji: '🚨' }
+      { id: 'cat-daily', name: 'Makan Pokok (Hemat)', targetAmount: Math.round(cap * 0.65), color: '#fbbf24', emoji: '🍜' },
+      { id: 'cat-transport', name: 'Transport & Bensin', targetAmount: Math.round(cap * 0.10), color: '#38bdf8', emoji: '🛵' },
+      { id: 'cat-save', name: 'Dana Darurat & Tabungan', targetAmount: Math.round(cap * 0.25), color: '#34d399', emoji: '🚨' }
     ],
     weekly_compact: [
-      { id: 'cat-daily', name: 'Operasional Harian', percent: 60, color: '#fbbf24', emoji: '🍜' },
-      { id: 'cat-weekend', name: 'Weekend / Jajan Santai', percent: 25, color: '#a78bfa', emoji: '☕' },
-      { id: 'cat-reserve', name: 'Cadangan Simpanan', percent: 15, color: '#34d399', emoji: '💰' }
+      { id: 'cat-daily', name: 'Operasional Harian', targetAmount: Math.round(cap * 0.60), color: '#fbbf24', emoji: '🍜' },
+      { id: 'cat-weekend', name: 'Weekend / Jajan Santai', targetAmount: Math.round(cap * 0.25), color: '#a78bfa', emoji: '☕' },
+      { id: 'cat-reserve', name: 'Cadangan Simpanan', targetAmount: Math.round(cap * 0.15), color: '#34d399', emoji: '💰' }
     ]
   };
 
@@ -1200,11 +1218,12 @@ function applyPreset(presetKey) {
   }
 }
 
-function updateCategoryPercent(catId, newPercent) {
-  const num = Math.max(0, Math.min(100, Number(newPercent) || 0));
+// User adjusts the nominal amount directly!
+function updateCategoryNominal(catId, newVal) {
+  const num = Math.max(0, Number(newVal) || 0);
   const cat = state.categories.find(c => c.id === catId);
   if (cat) {
-    cat.percent = num;
+    cat.targetAmount = num;
     saveState();
     updateUI();
   }
@@ -1231,30 +1250,31 @@ function deleteCategory(catId) {
   }
 }
 
+// Render Allocation Table with Editable Nominal (Rp) & Auto-Calculated (%)
 function renderAllocationTable() {
   const container = document.getElementById('allocationTableContainer');
-  const badgeTotal = document.getElementById('allocTotalPercentBadge');
+  const badgeTotalPct = document.getElementById('allocTotalPercentBadge');
+  const badgeTotalNom = document.getElementById('allocTotalNominalBadge');
   if (!container) return;
 
-  const totalPercent = state.categories.reduce((sum, c) => sum + (Number(c.percent) || 0), 0);
-  const capital = Number(state.capital) || 0;
+  const totalNominal = state.categories.reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
 
-  if (badgeTotal) {
-    badgeTotal.innerText = `${totalPercent}%`;
-    if (totalPercent === 100) {
-      badgeTotal.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-    } else {
-      badgeTotal.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse';
-    }
+  if (badgeTotalNom) badgeTotalNom.innerText = formatIDR(totalNominal);
+  if (badgeTotalPct) {
+    badgeTotalPct.innerText = '100%';
+    badgeTotalPct.className = 'text-xs font-bold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
   }
 
   container.innerHTML = state.categories.map(cat => {
-    const allocatedRp = Math.round(capital * (cat.percent / 100));
+    const catNominal = Number(cat.targetAmount) || 0;
+    const pct = totalNominal > 0 ? Math.round((catNominal / totalNominal) * 100) : 0;
+    
     return `
-      <div class="p-3.5 rounded-xl border border-[#2d1f50] bg-[#150d28] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 group">
+      <div class="p-3 sm:p-3.5 rounded-xl border border-[#2d1f50] bg-[#150d28] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 group hover:border-purple-500/40 transition">
+        <!-- Left: Emote, Color, Name -->
         <div class="flex items-center gap-3 flex-1 w-full sm:w-auto">
-          <!-- Clickable Emoji Badge to Open Quick Emoji/Color Editor -->
-          <button type="button" onclick="openAddCategoryModal('${cat.id}')" title="Klik untuk ganti emoticon & warna"
+          <!-- Clickable Emote Badge to Open Quick Editor -->
+          <button type="button" onclick="openAddCategoryModal('${cat.id}')" title="Klik untuk ganti emote & warna"
             class="w-10 h-10 rounded-xl bg-[#231840] border border-[#2d1f50] hover:border-purple-500 flex items-center justify-center text-xl shrink-0 transition shadow-inner">
             ${cat.emoji}
           </button>
@@ -1263,22 +1283,32 @@ function renderAllocationTable() {
           <input type="color" value="${cat.color}" onchange="updateCategoryColor('${cat.id}', this.value)" title="Pilih warna pos"
             class="w-7 h-7 rounded-lg cursor-pointer border-0 bg-transparent shrink-0">
 
-          <!-- Category Name -->
+          <!-- Category Name Inline Input -->
           <input type="text" value="${escapeHtml(cat.name)}" onchange="updateCategoryName('${cat.id}', this.value)"
-            class="text-sm font-semibold bg-transparent border-b border-dashed border-[#2d1f50] focus:border-purple-500 focus:outline-none w-full sm:w-72 text-white">
+            class="text-sm font-semibold bg-transparent border-b border-dashed border-[#2d1f50] focus:border-purple-500 focus:outline-none w-full sm:w-64 text-white">
         </div>
 
-        <div class="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
-          <div class="flex items-center gap-1.5">
-            <input type="number" min="0" max="100" value="${cat.percent}" onchange="updateCategoryPercent('${cat.id}', this.value)"
-              class="w-16 px-2 py-1 text-center font-bold text-sm bg-[#1b1232] border border-[#2d1f50] rounded-lg text-white">
-            <span class="text-xs text-[#9f96b5] font-semibold">%</span>
+        <!-- Right: Editable Nominal Rp & Auto-Calculated Percent -->
+        <div class="flex items-center justify-between sm:justify-end gap-2.5 sm:gap-3 w-full sm:w-auto">
+          
+          <!-- Editable Nominal Rupiah Input -->
+          <div class="relative flex items-center">
+            <span class="absolute left-2.5 text-xs text-[#9f96b5] font-semibold pointer-events-none">Rp</span>
+            <input type="number" min="0" step="10000" value="${catNominal}" 
+              onchange="updateCategoryNominal('${cat.id}', this.value)"
+              title="Ketik nominal rupiah pos ini"
+              placeholder="100000"
+              class="w-32 sm:w-40 pl-8 pr-2.5 py-1.5 text-sm font-extrabold bg-[#1b1232] border border-[#2d1f50] focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl text-white text-right">
           </div>
 
-          <div class="text-right min-w-[120px]">
-            <span class="text-sm font-bold text-purple-300">${formatIDR(allocatedRp)}</span>
+          <!-- Auto-Calculated Percentage Pill -->
+          <div class="min-w-[50px] text-center">
+            <span class="inline-block px-2.5 py-1 rounded-lg bg-[#231840] border border-[#2d1f50] text-xs font-bold text-purple-300">
+              ${pct}%
+            </span>
           </div>
 
+          <!-- Actions -->
           <div class="flex items-center gap-1">
             <button onclick="openAddCategoryModal('${cat.id}')" title="Edit Emoticon & Pos" class="p-1.5 text-[#6f6585] hover:text-purple-300 rounded-lg hover:bg-white/5 transition">
               <i data-lucide="edit-2" class="w-4 h-4"></i>
@@ -1287,6 +1317,7 @@ function renderAllocationTable() {
               <i data-lucide="trash" class="w-4 h-4"></i>
             </button>
           </div>
+
         </div>
       </div>
     `;
@@ -1305,7 +1336,7 @@ function updateCategoryColor(catId, color) {
 }
 
 // ==========================================
-// MODAL: ADD / EDIT CATEGORY WITH ADJUSTABLE EMOTICON
+// MODAL: ADD / EDIT CATEGORY (NOMINAL-FIRST)
 // ==========================================
 
 function openAddCategoryModal(catId) {
@@ -1313,7 +1344,7 @@ function openAddCategoryModal(catId) {
   const title = document.getElementById('modalCategoryTitle');
   const editIdInput = document.getElementById('catEditId');
   const nameInput = document.getElementById('catNameInput');
-  const percentInput = document.getElementById('catPercentInput');
+  const amountInput = document.getElementById('catAmountInput');
   const emojiInput = document.getElementById('catEmojiInput');
   const emojiPreview = document.getElementById('catEmojiPreview');
   const colorInput = document.getElementById('catColorInput');
@@ -1322,13 +1353,14 @@ function openAddCategoryModal(catId) {
 
   let selectedEmoji = '🏠';
   let selectedColor = COLOR_PALETTE[state.categories.length % COLOR_PALETTE.length];
+  let defaultAmount = 250000;
 
   if (catId) {
     const cat = state.categories.find(c => c.id === catId);
     if (cat) {
       editIdInput.value = cat.id;
       nameInput.value = cat.name;
-      percentInput.value = cat.percent;
+      defaultAmount = cat.targetAmount || 0;
       selectedEmoji = cat.emoji || '🏠';
       selectedColor = cat.color || '#38bdf8';
       if (title) title.innerHTML = `<i data-lucide="edit-2" class="w-4 h-4 text-purple-400"></i> Edit Pos Alokasi`;
@@ -1336,23 +1368,45 @@ function openAddCategoryModal(catId) {
   } else {
     editIdInput.value = '';
     nameInput.value = '';
-    percentInput.value = '';
     selectedEmoji = '🏠';
     selectedColor = COLOR_PALETTE[state.categories.length % COLOR_PALETTE.length];
     if (title) title.innerHTML = `<i data-lucide="folder-plus" class="w-4 h-4 text-purple-400"></i> Tambah Pos Alokasi`;
   }
 
-  emojiInput.value = selectedEmoji;
+  if (amountInput) amountInput.value = defaultAmount;
+  if (emojiInput) emojiInput.value = selectedEmoji;
   if (emojiPreview) emojiPreview.innerText = selectedEmoji;
-  colorInput.value = selectedColor;
+  if (colorInput) colorInput.value = selectedColor;
 
-  // Render Emoji Picker Grid
+  updateModalPercentHint(defaultAmount);
   renderEmojiPickerGrid(selectedEmoji);
-
-  // Render Color Swatches Grid
   renderColorSwatchesGrid(selectedColor);
 
   modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function setQuickModalNominal(val) {
+  const input = document.getElementById('catAmountInput');
+  if (input) {
+    const cur = Number(input.value) || 0;
+    input.value = cur + val;
+    updateModalPercentHint(input.value);
+  }
+}
+
+function onModalAmountChanged(val) {
+  updateModalPercentHint(val);
+}
+
+function updateModalPercentHint(nominalVal) {
+  const hint = document.getElementById('catModalPercentHint');
+  if (!hint) return;
+  const amt = Number(nominalVal) || 0;
+  const currentTotal = state.categories.reduce((s, c) => s + (Number(c.targetAmount) || 0), 0);
+  const newTotal = currentTotal > 0 ? currentTotal : amt;
+  const pct = newTotal > 0 ? Math.round((amt / newTotal) * 100) : 0;
+  hint.innerHTML = `<i data-lucide="info" class="w-3.5 h-3.5"></i> Estimasi porsi: ~${pct}% dari total alokasi pos`;
   if (window.lucide) lucide.createIcons();
 }
 
@@ -1414,16 +1468,12 @@ function closeCategoryModal() {
 function saveCategoryModal() {
   const editId = document.getElementById('catEditId').value;
   const name = document.getElementById('catNameInput').value.trim();
-  const percent = Number(document.getElementById('catPercentInput').value);
+  const targetAmount = Number(document.getElementById('catAmountInput').value) || 0;
   const color = document.getElementById('catColorInput').value;
   const emoji = document.getElementById('catEmojiInput').value.trim() || '🏠';
 
   if (!name) {
     alert('Nama pos alokasi tidak boleh kosong.');
-    return;
-  }
-  if (isNaN(percent) || percent <= 0) {
-    alert('Persentase harus berupa angka lebih dari 0.');
     return;
   }
 
@@ -1432,7 +1482,7 @@ function saveCategoryModal() {
     const cat = state.categories.find(c => c.id === editId);
     if (cat) {
       cat.name = name;
-      cat.percent = percent;
+      cat.targetAmount = targetAmount;
       cat.color = color;
       cat.emoji = emoji;
     }
@@ -1441,7 +1491,7 @@ function saveCategoryModal() {
     state.categories.push({
       id: 'cat-' + Date.now(),
       name,
-      percent,
+      targetAmount,
       color,
       emoji
     });
@@ -1579,10 +1629,13 @@ function importDataJSON(event) {
       const imported = JSON.parse(e.target.result);
       if (imported.categories && imported.capital !== undefined) {
         state = { ...DEFAULT_STATE, ...imported };
-        // Auto-assign emoji if missing in older backups
+        const cap = Number(state.capital) || 1500000;
         state.categories.forEach((cat, idx) => {
           if (!cat.emoji) cat.emoji = getCategoryEmojiFallback(cat);
           if (!cat.color) cat.color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
+          if (cat.targetAmount === undefined || cat.targetAmount === null || isNaN(cat.targetAmount)) {
+            cat.targetAmount = Math.round(cap * ((cat.percent || 20) / 100));
+          }
         });
         saveState();
         updateUI();

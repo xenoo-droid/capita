@@ -36,7 +36,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="style.css?v=2.2">
+  <link rel="stylesheet" href="style.css?v=2.3">
 </head>
 <body class="h-full bg-[#0e081c] text-white flex flex-col md:flex-row font-sans antialiased selection:bg-purple-600 selection:text-white">
 
@@ -598,12 +598,15 @@
                 <i data-lucide="layout-list" class="w-4 h-4 text-purple-400"></i>
                 Daftar Pos Alokasi (Departments)
               </h3>
-              <p class="text-xs text-[#9f96b5]">Pastikan total persentase berjumlah tepat 100%</p>
+              <p class="text-xs text-[#9f96b5]">Ketik nominal Rupiah (Rp) jatah tiap pos — persentase (%) otomatis menyesuaikan.</p>
             </div>
 
             <div class="flex items-center gap-2">
-              <span class="text-xs text-[#9f96b5]">Total:</span>
-              <span id="allocTotalPercentBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span class="text-xs text-[#9f96b5]">Total Pos:</span>
+              <span id="allocTotalNominalBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                Rp 0
+              </span>
+              <span id="allocTotalPercentBadge" class="text-xs font-bold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 100%
               </span>
               <button onclick="openAddCategoryModal()" class="px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition flex items-center gap-1">
@@ -848,14 +851,24 @@
             class="w-full px-3 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white">
         </div>
 
-        <!-- Persentase Alokasi -->
+        <!-- Target Nominal Alokasi (Rp) -->
         <div>
-          <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Persentase Alokasi (%)</label>
+          <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Target Nominal Alokasi (Rp)</label>
           <div class="relative">
-            <input type="number" id="catPercentInput" min="1" max="100" placeholder="20"
-              class="w-full pl-3 pr-8 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white font-semibold">
-            <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-xs font-bold text-[#9f96b5]">%</span>
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-xs font-bold text-[#6f6585]">Rp</span>
+            <input type="number" id="catAmountInput" min="0" step="10000" placeholder="250000"
+              class="w-full pl-10 pr-3 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white font-bold"
+              oninput="onModalAmountChanged(this.value)">
           </div>
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            <button type="button" onclick="setQuickModalNominal(50000)" class="text-[11px] py-1 px-2.5 bg-[#1b1232] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">+50k</button>
+            <button type="button" onclick="setQuickModalNominal(100000)" class="text-[11px] py-1 px-2.5 bg-[#1b1232] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">+100k</button>
+            <button type="button" onclick="setQuickModalNominal(250000)" class="text-[11px] py-1 px-2.5 bg-[#1b1232] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">+250k</button>
+            <button type="button" onclick="setQuickModalNominal(500000)" class="text-[11px] py-1 px-2.5 bg-[#1b1232] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">+500k</button>
+          </div>
+          <p id="catModalPercentHint" class="text-[11px] text-purple-300 mt-1.5 flex items-center gap-1 font-medium">
+            <i data-lucide="info" class="w-3.5 h-3.5"></i> Persentase (%) otomatis dihitung dari proporsi nominal
+          </p>
         </div>
       </div>
 
@@ -906,6 +919,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.2"></script>
+  <script src="app.js?v=2.3"></script>
 </body>
 </html>
