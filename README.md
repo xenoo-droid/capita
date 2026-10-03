@@ -15,17 +15,22 @@ Tools manajemen keuangan dan alokasi modal praktis untuk anak kuliahan. Didesain
      - **Simpel 3 Pos**: 60% Harian, 25% Jajan, 15% Cadangan.
    - Pos alokasi fleksibel: bisa tambah pos baru, ubah persentase, ganti nama, dan sesuaikan warna indikator.
 
-2. **Dukungan Multi-Siklus (Fleksibel)**
-   - **Siklus Bulanan**: Atur tanggal terima kiriman ortu/gaji magang (contoh: tanggal 1 atau tanggal 25).
-   - **Siklus Mingguan**: Atur uang saku per minggu (contoh: mulai setiap hari Senin).
+2. **Dukungan Multi-Siklus Fleksibel**
+   - **Siklus Mingguan Fleksibel**: 1 Minggu, 2 Minggu (*dwi-mingguan*), 3 Minggu, atau 4 Minggu sekali dengan tanggal mulai siklus.
+   - **Siklus Harian & Kustom N-Hari**: Budgeting harian (1 hari), 3 hari, 5 hari, 10 hari, atau input angka hari bebas sesuka hati.
+   - **Siklus Bulanan**: Pilihan tanggal kiriman ortu/gaji magang (contoh: tanggal 1 atau tanggal 25).
 
-3. **Expense Tracker Harian**
-   - Catat pengeluaran harian dengan cepat (+10k, +15k, +25k, +50k quick chips).
-   - Otomatis mengurangi kuota pos anggaran terkait.
-   - Filter riwayat pengeluaran berdasarkan pos alokasi.
+3. **Catat Transaksi: Pengeluaran & Pemasukan Tambahan (Uang Kaget / Rezeki)**
+   - **Pencatatan Pengeluaran**: Pengurangan kuota pos otomatis dengan quick chips (+10k, +15k, +25k, +50k).
+   - **Pencatatan Pemasukan Tambahan**:
+     - Bila ada uang dadakan (freelance, beasiswa, hadiah, jualan barang bekas).
+     - **Opsi Alokasi Pemasukan**:
+       - ⚖️ *Bagi Otomatis*: Uang masuk dibagi proporsional ke semua pos sesuai formula persentase anggaran.
+       - 🎯 *Alokasi Langsung*: Uang masuk 100% menambah kuota pos tertentu (misal langsung masuk ke Tabungan atau Kebutuhan).
+   - **Filter Transaksi**: Filter berdasarkan jenis (Semua / Pengeluaran / Pemasukan) dan berdasarkan pos alokasi.
 
 4. **Visualisasi Interaktif (Chart.js)**
-   - **Pie / Doughnut Chart**: Menampilkan proporsi alokasi rencana vs realisasi pengeluaran sesungguhnya.
+   - **Pie / Doughnut Chart**: Menampilkan proporsi alokasi rencana (dengan penyesuaian pemasukan) vs realisasi pengeluaran sesungguhnya.
    - **Bar Chart**: Perbandingan berdampingan antara *Budget Alokasi* vs *Realisasi Terpakai* per pos.
    - **Warning Overbudget**: Pos yang melebihi alokasi otomatis ditandai merah (*overbudget*).
 
@@ -38,27 +43,9 @@ Tools manajemen keuangan dan alokasi modal praktis untuk anak kuliahan. Didesain
 
 ---
 
-## 🚀 Cara Menjalankan & Membuka di Laptop & HP
+## 🚀 Akses Online Langsung (GitHub Pages)
 
-### Opsi A: Menggunakan Script Python (Laptop & HP Satu WiFi / Hotspot)
-1. Buka PowerShell / Terminal di folder ini:
-   ```bash
-   python serve.py
-   ```
-2. Browser laptop akan terbuka otomatis di `http://localhost:8080`.
-3. Di terminal akan muncul alamat IP LAN (contoh: `http://192.168.1.15:8080`).
-4. Buka alamat tersebut di browser Chrome/Safari pada smartphone (HP) kamu!
-5. **Tip di HP**: Ketuk titik tiga di Chrome -> pilih **"Tambahkan ke Layar Utama" (Add to Home Screen)** agar menjadi seperti aplikasi native tanpa instalasi toko aplikasi.
+Web app ini sudah terhubung dan live di GitHub Pages:
+👉 📱 [**https://xenoo-droid.github.io/capita/**](https://xenoo-droid.github.io/capita/)
 
----
-
-### Opsi B: Buka Langsung File HTML (Laptop Saja)
-Klik ganda file `index.html` langsung di file explorer untuk membukanya di browser laptop tanpa perlu menjalankan server.
-
----
-
-### Opsi C: Pasang Gratis di GitHub Pages atau Vercel (Online 24/7 di HP Tanpa Laptop)
-Karena web app ini murni HTML, CSS, dan JavaScript tanpa backend database yang rumit:
-- **GitHub Pages**: Buat repository baru di GitHub -> upload seluruh file folder ini -> aktifkan GitHub Pages di menu Settings.
-- **Vercel / Netlify**: Drag & drop folder ini ke dashboard Vercel/Netlify.
-- Kamu akan mendapatkan URL publik gratis (misal: `https://kapitalkula.vercel.app`) yang bisa kamu buka kapan saja di HP!
+Di HP (Chrome/Safari), kamu cukup buka tautan di atas dan pilih **"Add to Home Screen"** agar menjadi aplikasi di layar HP kamu.

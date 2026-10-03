@@ -27,6 +27,9 @@ const DEFAULT_STATE = {
     { id: 'exp-2', amount: 50000, categoryId: 'cat-study', note: 'Beli paket kuota data', date: todayIso },
     { id: 'exp-3', amount: 28000, categoryId: 'cat-wants', note: 'Kopi susu senja tugas', date: todayIso }
   ],
+  incomes: [
+    { id: 'inc-1', amount: 150000, title: 'Bantu desain pamflet BEM', date: todayIso, allocMode: 'proportional', targetCategoryId: null }
+  ],
   chartMode: 'alloc', // 'alloc' | 'real'
   theme: 'light'
 };
@@ -47,6 +50,7 @@ function loadState() {
       const parsed = JSON.parse(raw);
       const loaded = { ...DEFAULT_STATE, ...parsed };
       // Migrasi data lama jika ada
+      if (!loaded.incomes) loaded.incomes = [];
       if (loaded.cycle) {
         if (!loaded.cycle.monthlyStartDay) loaded.cycle.monthlyStartDay = loaded.cycle.startDay || 1;
         if (!loaded.cycle.weeklyInterval) loaded.cycle.weeklyInterval = 1;
@@ -160,10 +164,50 @@ function getCycleInfo() {
 // Filter expenses for current cycle
 function getCurrentCycleExpenses() {
   const { cycleStart, cycleEnd } = getCycleInfo();
-  return state.expenses.filter(item => {
+  return (state.expenses || []).filter(item => {
     const itemDate = new Date(item.date + 'T12:00:00');
     return itemDate >= cycleStart && itemDate <= cycleEnd;
   });
+}
+
+// Filter incomes for current cycle
+function getCurrentCycleIncomes() {
+  const { cycleStart, cycleEnd } = getCycleInfo();
+  return (state.incomes || []).filter(item => {
+    const itemDate = new Date(item.date + 'T12:00:00');
+    return itemDate >= cycleStart && itemDate <= cycleEnd;
+  });
+}
+
+// Hitung alokasi budget dinamis (memperhitungkan uang masuk proporsional dan langsung)
+function getCategoryBudgets(currentIncomes) {
+  const baseCapital = Number(state.capital) || 0;
+  
+  // Pemasukan yang dibagi proporsional ke semua pos
+  const propIncome = (currentIncomes || [])
+    .filter(inc => inc.allocMode === 'proportional')
+    .reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+
+  // Pemasukan yang dialokasikan penuh ke pos tertentu
+  const directMap = {};
+  state.categories.forEach(c => directMap[c.id] = 0);
+  (currentIncomes || [])
+    .filter(inc => inc.allocMode === 'direct' && inc.targetCategoryId)
+    .forEach(inc => {
+      directMap[inc.targetCategoryId] = (directMap[inc.targetCategoryId] || 0) + (Number(inc.amount) || 0);
+    });
+
+  const budgets = {};
+  state.categories.forEach(cat => {
+    const fromBaseAndProp = Math.round((baseCapital + propIncome) * (cat.percent / 100));
+    const fromDirect = directMap[cat.id] || 0;
+    budgets[cat.id] = fromBaseAndProp + fromDirect;
+  });
+
+  const totalExtra = (currentIncomes || []).reduce((sum, inc) => sum + (Number(inc.amount) || 0), 0);
+  const totalEffective = baseCapital + totalExtra;
+
+  return { budgets, baseCapital, totalExtra, totalEffective, propIncome, directMap };
 }
 
 // ==========================================
@@ -172,10 +216,13 @@ function getCurrentCycleExpenses() {
 
 function updateUI() {
   const currentExpenses = getCurrentCycleExpenses();
+  const currentIncomes = getCurrentCycleIncomes();
+  const budgetInfo = getCategoryBudgets(currentIncomes);
+
   const totalSpent = currentExpenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const capital = Number(state.capital) || 0;
-  const remaining = capital - totalSpent;
-  const spentPct = capital > 0 ? Math.round((totalSpent / capital) * 100) : 0;
+  const effectiveCapital = budgetInfo.totalEffective;
+  const remaining = effectiveCapital - totalSpent;
+  const spentPct = effectiveCapital > 0 ? Math.round((totalSpent / effectiveCapital) * 100) : 0;
   const cycleInfo = getCycleInfo();
   const { remainingDays, label, badge } = cycleInfo;
 
@@ -198,10 +245,16 @@ function updateUI() {
   const elDailySafe = document.getElementById('statDailySafe');
   const elRemainingDays = document.getElementById('statRemainingDays');
 
-  if (elTotalCapital) elTotalCapital.innerText = formatIDR(capital);
+  if (elTotalCapital) {
+    if (budgetInfo.totalExtra > 0) {
+      elTotalCapital.innerHTML = `${formatIDR(effectiveCapital)}<span class="text-[11px] block font-normal text-slate-400 mt-0.5">(Saku ${formatIDR(budgetInfo.baseCapital)} + Rezeki ${formatIDR(budgetInfo.totalExtra)})</span>`;
+    } else {
+      elTotalCapital.innerText = formatIDR(effectiveCapital);
+    }
+  }
   if (elCycleLabel) elCycleLabel.innerText = `Siklus: ${label}`;
   if (elTotalSpent) elTotalSpent.innerText = formatIDR(totalSpent);
-  if (elSpentPercent) elSpentPercent.innerText = `${spentPct}% dari modal`;
+  if (elSpentPercent) elSpentPercent.innerText = `${spentPct}% dari total modal`;
   if (elRemaining) elRemaining.innerText = formatIDR(remaining);
   
   if (elHealthStatus) {
@@ -221,16 +274,16 @@ function updateUI() {
   if (elRemainingDays) elRemainingDays.innerText = `Sisa ${remainingDays} hari di siklus ini`;
 
   // Render Charts
-  renderCharts(currentExpenses);
+  renderCharts(currentExpenses, currentIncomes, budgetInfo);
 
   // Render Category Progress Bars
-  renderCategoryBars(currentExpenses);
+  renderCategoryBars(currentExpenses, currentIncomes, budgetInfo);
 
   // Render Category Options in Expense Form & Filter
   populateCategorySelects();
 
-  // Render Expense List
-  renderExpenseList();
+  // Render Transaction List (Expenses + Incomes)
+  renderTransactionList();
 
   // Render Allocation Table
   renderAllocationTable();
@@ -275,14 +328,18 @@ function setChartMode(mode) {
     btnAlloc.className = 'px-2.5 py-1 rounded-md font-medium text-slate-600 dark:text-slate-300';
   }
 
-  const currentExpenses = getCurrentCycleExpenses();
-  renderCharts(currentExpenses);
+  updateUI();
 }
 
-function renderCharts(currentExpenses) {
+function renderCharts(currentExpenses, currentIncomes, budgetInfo) {
   const ctxPie = document.getElementById('pieChart');
   const ctxBar = document.getElementById('barChart');
   if (!ctxPie || !ctxBar) return;
+
+  if (!budgetInfo) {
+    currentIncomes = currentIncomes || getCurrentCycleIncomes();
+    budgetInfo = getCategoryBudgets(currentIncomes);
+  }
 
   const spentMap = getCategorySpentMap(currentExpenses);
   const isDark = document.documentElement.classList.contains('dark');
@@ -291,14 +348,13 @@ function renderCharts(currentExpenses) {
 
   const labels = state.categories.map(c => c.name);
   const colors = state.categories.map(c => c.color);
-  const capital = Number(state.capital) || 0;
 
   // Pie Chart Data based on mode
   let pieData = [];
   let centerTotal = 0;
   if (state.chartMode === 'alloc') {
-    pieData = state.categories.map(c => (capital * (c.percent / 100)));
-    centerTotal = capital;
+    pieData = state.categories.map(c => budgetInfo.budgets[c.id] || 0);
+    centerTotal = budgetInfo.totalEffective;
   } else {
     pieData = state.categories.map(c => spentMap[c.id] || 0);
     centerTotal = currentExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
@@ -370,7 +426,7 @@ function renderCharts(currentExpenses) {
     barChartInstance.destroy();
   }
 
-  const allocData = state.categories.map(c => Math.round(capital * (c.percent / 100)));
+  const allocData = state.categories.map(c => budgetInfo.budgets[c.id] || 0);
   const spentData = state.categories.map(c => spentMap[c.id] || 0);
 
   barChartInstance = new Chart(ctxBar, {
@@ -389,7 +445,7 @@ function renderCharts(currentExpenses) {
           label: 'Realisasi Terpakai',
           data: spentData,
           backgroundColor: state.categories.map(c => {
-            const budget = capital * (c.percent / 100);
+            const budget = budgetInfo.budgets[c.id] || 0;
             const spent = spentMap[c.id] || 0;
             return spent > budget ? '#f43f5e' : (isDark ? '#059669' : '#10b981');
           }),
@@ -433,15 +489,19 @@ function renderCharts(currentExpenses) {
 }
 
 // Category Progress Cards
-function renderCategoryBars(currentExpenses) {
+function renderCategoryBars(currentExpenses, currentIncomes, budgetInfo) {
   const container = document.getElementById('categoryCardsContainer');
   if (!container) return;
 
+  if (!budgetInfo) {
+    currentIncomes = currentIncomes || getCurrentCycleIncomes();
+    budgetInfo = getCategoryBudgets(currentIncomes);
+  }
+
   const spentMap = getCategorySpentMap(currentExpenses);
-  const capital = Number(state.capital) || 0;
 
   container.innerHTML = state.categories.map(cat => {
-    const budget = Math.round(capital * (cat.percent / 100));
+    const budget = budgetInfo.budgets[cat.id] || 0;
     const spent = spentMap[cat.id] || 0;
     const remaining = budget - spent;
     const pct = budget > 0 ? Math.round((spent / budget) * 100) : 0;
@@ -461,6 +521,9 @@ function renderCategoryBars(currentExpenses) {
       barColor = 'bg-emerald-500';
     }
 
+    const hasDirectBonus = (budgetInfo.directMap && budgetInfo.directMap[cat.id] > 0);
+    const bonusText = hasDirectBonus ? `<span class="text-emerald-500 font-medium ml-1">(+${formatIDR(budgetInfo.directMap[cat.id])} khusus)</span>` : '';
+
     return `
       <div class="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/60">
         <div class="flex items-center justify-between mb-1.5">
@@ -477,7 +540,7 @@ function renderCategoryBars(currentExpenses) {
 
         <div class="flex items-center justify-between text-[11px] text-slate-400">
           <span>Terpakai: <strong class="text-slate-700 dark:text-slate-300">${formatIDR(spent)}</strong></span>
-          <span>Target Alokasi: <strong class="text-slate-700 dark:text-slate-300">${formatIDR(budget)} (${cat.percent}%)</strong></span>
+          <span>Target Alokasi: <strong class="text-slate-700 dark:text-slate-300">${formatIDR(budget)}</strong>${bonusText}</span>
         </div>
       </div>
     `;
@@ -485,12 +548,61 @@ function renderCategoryBars(currentExpenses) {
 }
 
 // ==========================================
-// EXPENSE TRACKING
+// TRANSACTIONS (EXPENSE & INCOME)
 // ==========================================
+
+function setTxFormType(type) {
+  const btnExp = document.getElementById('btnTypeExpense');
+  const btnInc = document.getElementById('btnTypeIncome');
+  const formExp = document.getElementById('formExpense');
+  const formInc = document.getElementById('formIncome');
+
+  if (!btnExp || !btnInc) return;
+
+  if (type === 'expense') {
+    btnExp.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-slate-800 text-rose-500 shadow-xs flex items-center justify-center gap-1.5 transition';
+    btnInc.className = 'flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-emerald-500 flex items-center justify-center gap-1.5 transition';
+    if (formExp) formExp.classList.remove('hidden');
+    if (formInc) formInc.classList.add('hidden');
+  } else {
+    btnInc.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-slate-800 text-emerald-500 shadow-xs flex items-center justify-center gap-1.5 transition';
+    btnExp.className = 'flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-rose-500 flex items-center justify-center gap-1.5 transition';
+    if (formInc) formInc.classList.remove('hidden');
+    if (formExp) formExp.classList.add('hidden');
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function onIncomeAllocModeChanged(mode) {
+  const wrap = document.getElementById('incTargetCategoryWrap');
+  if (!wrap) return;
+  if (mode === 'direct') {
+    wrap.classList.remove('hidden');
+  } else {
+    wrap.classList.add('hidden');
+  }
+}
+
+function setQuickExp(val) {
+  const input = document.getElementById('expAmount');
+  if (input) {
+    const cur = Number(input.value) || 0;
+    input.value = cur + val;
+  }
+}
+
+function setQuickInc(val) {
+  const input = document.getElementById('incAmount');
+  if (input) {
+    const cur = Number(input.value) || 0;
+    input.value = cur + val;
+  }
+}
 
 function populateCategorySelects() {
   const selForm = document.getElementById('expCategory');
   const selFilter = document.getElementById('filterExpCategory');
+  const selTarget = document.getElementById('incTargetCategory');
   if (!selForm) return;
 
   const currentFilter = selFilter ? selFilter.value : 'ALL';
@@ -498,6 +610,12 @@ function populateCategorySelects() {
   selForm.innerHTML = state.categories.map(c => `
     <option value="${c.id}">${c.name}</option>
   `).join('');
+
+  if (selTarget) {
+    selTarget.innerHTML = state.categories.map(c => `
+      <option value="${c.id}">${c.name}</option>
+    `).join('');
+  }
 
   if (selFilter) {
     selFilter.innerHTML = `
@@ -533,17 +651,45 @@ function handleExpenseSubmit(e) {
   // Reset form
   document.getElementById('expAmount').value = '';
   document.getElementById('expNote').value = '';
-  document.getElementById('expDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('expDate').value = todayIso;
 
   updateUI();
 }
 
-function setQuickExp(val) {
-  const input = document.getElementById('expAmount');
-  if (input) {
-    const cur = Number(input.value) || 0;
-    input.value = cur + val;
+function handleIncomeSubmit(e) {
+  e.preventDefault();
+  const amount = Number(document.getElementById('incAmount').value);
+  const title = document.getElementById('incTitle').value.trim();
+  const allocMode = document.getElementById('incAllocMode').value;
+  const targetCategoryId = document.getElementById('incTargetCategory')?.value || null;
+  const date = document.getElementById('incDate').value;
+
+  if (!amount || amount <= 0) {
+    alert('Masukkan jumlah pemasukan yang valid.');
+    return;
   }
+
+  const newIncome = {
+    id: 'inc-' + Date.now(),
+    amount,
+    title,
+    date,
+    allocMode,
+    targetCategoryId: allocMode === 'direct' ? targetCategoryId : null
+  };
+
+  if (!state.incomes) state.incomes = [];
+  state.incomes.unshift(newIncome);
+  saveState();
+
+  // Reset form
+  document.getElementById('incAmount').value = '';
+  document.getElementById('incTitle').value = '';
+  document.getElementById('incDate').value = todayIso;
+  document.getElementById('incAllocMode').value = 'proportional';
+  onIncomeAllocModeChanged('proportional');
+
+  updateUI();
 }
 
 function deleteExpense(id) {
@@ -554,27 +700,49 @@ function deleteExpense(id) {
   }
 }
 
-function renderExpenseList() {
+function deleteIncome(id) {
+  if (confirm('Hapus catatan pemasukan ini?')) {
+    state.incomes = (state.incomes || []).filter(i => i.id !== id);
+    saveState();
+    updateUI();
+  }
+}
+
+function renderTransactionList() {
   const container = document.getElementById('expenseListContainer');
   const txCountBadge = document.getElementById('txCountBadge');
   if (!container) return;
 
-  const currentExpenses = getCurrentCycleExpenses();
+  const currentExpenses = getCurrentCycleExpenses().map(e => ({ ...e, type: 'expense' }));
+  const currentIncomes = getCurrentCycleIncomes().map(i => ({ ...i, type: 'income' }));
+
+  let allTx = [...currentExpenses, ...currentIncomes].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const filterType = document.getElementById('filterTxType')?.value || 'ALL';
   const filterCat = document.getElementById('filterExpCategory')?.value || 'ALL';
 
-  let filtered = currentExpenses;
-  if (filterCat !== 'ALL') {
-    filtered = currentExpenses.filter(e => e.categoryId === filterCat);
+  if (filterType === 'EXPENSE') {
+    allTx = allTx.filter(t => t.type === 'expense');
+  } else if (filterType === 'INCOME') {
+    allTx = allTx.filter(t => t.type === 'income');
   }
 
-  if (txCountBadge) txCountBadge.innerText = filtered.length;
+  if (filterCat !== 'ALL') {
+    allTx = allTx.filter(t => {
+      if (t.type === 'expense') return t.categoryId === filterCat;
+      if (t.type === 'income') return t.allocMode === 'direct' && t.targetCategoryId === filterCat;
+      return true; // Proportional income affects all categories
+    });
+  }
 
-  if (filtered.length === 0) {
+  if (txCountBadge) txCountBadge.innerText = allTx.length;
+
+  if (allTx.length === 0) {
     container.innerHTML = `
       <div class="py-12 text-center text-slate-400">
         <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
-        <p class="text-xs">Belum ada transaksi pengeluaran di siklus ini.</p>
-        <p class="text-[11px] mt-1 text-slate-500">Mulai catat pengeluaran harianmu di form sebelah kiri.</p>
+        <p class="text-xs">Belum ada transaksi di siklus ini.</p>
+        <p class="text-[11px] mt-1 text-slate-500">Mulai catat pengeluaran atau pemasukan baru di form sebelah kiri.</p>
       </div>
     `;
     if (window.lucide) lucide.createIcons();
@@ -586,31 +754,66 @@ function renderExpenseList() {
 
   container.innerHTML = `
     <div class="divide-y divide-slate-100 dark:divide-slate-700/60">
-      ${filtered.map(item => {
-        const cat = catMap[item.categoryId] || { name: 'Lainnya', color: '#94a3b8' };
-        return `
-          <div class="py-3 flex items-center justify-between gap-3 group">
-            <div class="flex items-center gap-3">
-              <span class="w-2.5 h-10 rounded-full shrink-0" style="background-color: ${cat.color}"></span>
-              <div>
-                <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(item.note)}</p>
-                <div class="flex items-center gap-2 mt-0.5">
-                  <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                    ${cat.name}
-                  </span>
-                  <span class="text-[11px] text-slate-400">${formatDateID(item.date)}</span>
+      ${allTx.map(item => {
+        if (item.type === 'expense') {
+          const cat = catMap[item.categoryId] || { name: 'Lainnya', color: '#94a3b8' };
+          return `
+            <div class="py-3 flex items-center justify-between gap-3 group">
+              <div class="flex items-center gap-3">
+                <span class="w-2.5 h-10 rounded-full shrink-0" style="background-color: ${cat.color}"></span>
+                <div>
+                  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(item.note)}</p>
+                  <div class="flex items-center gap-2 mt-0.5">
+                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                      ${cat.name}
+                    </span>
+                    <span class="text-[11px] text-slate-400">${formatDateID(item.date)}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-sm text-rose-500 dark:text-rose-400">-${formatIDR(item.amount)}</span>
-              <button onclick="deleteExpense('${item.id}')" title="Hapus" class="p-1.5 text-slate-300 hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
-                <i data-lucide="trash" class="w-4 h-4"></i>
-              </button>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-sm text-rose-500 dark:text-rose-400">-${formatIDR(item.amount)}</span>
+                <button onclick="deleteExpense('${item.id}')" title="Hapus" class="p-1.5 text-slate-300 hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
+                  <i data-lucide="trash" class="w-4 h-4"></i>
+                </button>
+              </div>
             </div>
-          </div>
-        `;
+          `;
+        } else {
+          // Income
+          const isDirect = item.allocMode === 'direct' && item.targetCategoryId;
+          const targetCat = isDirect ? (catMap[item.targetCategoryId] || { name: 'Pos Khusus' }) : null;
+          const allocLabel = isDirect ? `Masuk ke: ${targetCat.name}` : 'Alokasi: Dibagi ke Semua Pos';
+          return `
+            <div class="py-3 flex items-center justify-between gap-3 group bg-emerald-50/40 dark:bg-emerald-950/20 px-2 rounded-xl my-1 border border-emerald-100 dark:border-emerald-900/30">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                  <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    ${escapeHtml(item.title)}
+                    <span class="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">Rezeki Masuk</span>
+                  </p>
+                  <div class="flex items-center gap-2 mt-0.5">
+                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      ${allocLabel}
+                    </span>
+                    <span class="text-[11px] text-slate-400">${formatDateID(item.date)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-sm text-emerald-600 dark:text-emerald-400">+${formatIDR(item.amount)}</span>
+                <button onclick="deleteIncome('${item.id}')" title="Hapus" class="p-1.5 text-slate-300 hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
+                  <i data-lucide="trash" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          `;
+        }
       }).join('')}
     </div>
   `;
@@ -981,8 +1184,7 @@ function switchTab(tabId) {
 
   // Re-render chart size when tab becomes visible
   if (tabId === 'dashboard') {
-    const currentExpenses = getCurrentCycleExpenses();
-    setTimeout(() => renderCharts(currentExpenses), 50);
+    setTimeout(() => updateUI(), 50);
   }
   
   if (window.lucide) lucide.createIcons();
@@ -1001,8 +1203,7 @@ function initTheme() {
       const next = current === 'dark' ? 'light' : 'dark';
       applyTheme(next);
       localStorage.setItem('kapitalkula_theme', next);
-      const currentExpenses = getCurrentCycleExpenses();
-      renderCharts(currentExpenses);
+      updateUI();
     });
   }
 }
@@ -1050,11 +1251,11 @@ function escapeHtml(str) {
 // ==========================================
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Set default expense date to today
-  const dateInput = document.getElementById('expDate');
-  if (dateInput) {
-    dateInput.value = new Date().toISOString().split('T')[0];
-  }
+  // Set default expense and income date to today
+  const expDateInput = document.getElementById('expDate');
+  const incDateInput = document.getElementById('incDate');
+  if (expDateInput) expDateInput.value = todayIso;
+  if (incDateInput) incDateInput.value = todayIso;
 
   initTheme();
   updateUI();

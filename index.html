@@ -77,8 +77,8 @@
         Dashboard & Visualisasi
       </button>
       <button onclick="switchTab('expenses')" id="tabBtn-expenses" class="tab-btn inactive-tab flex items-center gap-2 py-2.5 px-4 font-medium text-sm border-b-2 transition whitespace-nowrap">
-        <i data-lucide="receipt" class="w-4 h-4"></i>
-        Catat Pengeluaran
+        <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+        Catat Transaksi (Keluar/Masuk)
       </button>
       <button onclick="switchTab('allocation')" id="tabBtn-allocation" class="tab-btn inactive-tab flex items-center gap-2 py-2.5 px-4 font-medium text-sm border-b-2 transition whitespace-nowrap">
         <i data-lucide="pie-chart" class="w-4 h-4"></i>
@@ -234,21 +234,28 @@
     </div>
 
     <!-- ==============================================
-         TAB 2: CATAT PENGELUARAN (EXPENSE TRACKER)
+         TAB 2: CATAT TRANSAKSI (PENGELUARAN & PEMASUKAN)
          ============================================== -->
     <div id="tabContent-expenses" class="tab-panel hidden space-y-6">
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        <!-- Form Tambah Pengeluaran -->
+        <!-- Form Tambah Transaksi -->
         <div class="lg:col-span-1 p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 shadow-sm h-fit">
-          <h3 class="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4">
-            <i data-lucide="plus-circle" class="w-4 h-4 text-indigo-500"></i>
-            Tambah Pengeluaran Baru
-          </h3>
+          
+          <!-- Switcher: Pengeluaran vs Pemasukan -->
+          <div class="flex rounded-xl bg-slate-100 dark:bg-slate-900 p-1 mb-4">
+            <button type="button" id="btnTypeExpense" onclick="setTxFormType('expense')" class="flex-1 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-slate-800 text-rose-500 shadow-xs flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i> Pengeluaran
+            </button>
+            <button type="button" id="btnTypeIncome" onclick="setTxFormType('income')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-emerald-500 flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i> Pemasukan (+Rezeki)
+            </button>
+          </div>
 
+          <!-- FORM PENGELUARAN -->
           <form id="formExpense" class="space-y-4" onsubmit="handleExpenseSubmit(event)">
             <div>
-              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Jumlah (Rupiah)</label>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Jumlah Pengeluaran (Rp)</label>
               <div class="relative">
                 <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-sm font-semibold text-slate-400">Rp</span>
                 <input type="number" id="expAmount" required min="100" placeholder="Contoh: 25000"
@@ -256,15 +263,15 @@
               </div>
               <!-- Quick Chips -->
               <div class="flex flex-wrap gap-1.5 mt-2">
-                <button type="button" onclick="setQuickExp(10000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-600 dark:text-slate-300 rounded-md transition">+10k</button>
-                <button type="button" onclick="setQuickExp(15000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-600 dark:text-slate-300 rounded-md transition">+15k</button>
-                <button type="button" onclick="setQuickExp(25000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-600 dark:text-slate-300 rounded-md transition">+25k</button>
-                <button type="button" onclick="setQuickExp(50000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-600 dark:text-slate-300 rounded-md transition">+50k</button>
+                <button type="button" onclick="setQuickExp(10000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950 text-slate-600 dark:text-slate-300 rounded-md transition">+10k</button>
+                <button type="button" onclick="setQuickExp(15000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950 text-slate-600 dark:text-slate-300 rounded-md transition">+15k</button>
+                <button type="button" onclick="setQuickExp(25000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950 text-slate-600 dark:text-slate-300 rounded-md transition">+25k</button>
+                <button type="button" onclick="setQuickExp(50000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950 text-slate-600 dark:text-slate-300 rounded-md transition">+50k</button>
               </div>
             </div>
 
             <div>
-              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Pos Alokasi</label>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Pos Alokasi yang Terpotong</label>
               <select id="expCategory" required class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 <!-- Populated dynamically -->
               </select>
@@ -272,7 +279,7 @@
 
             <div>
               <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Keterangan / Keperluan</label>
-              <input type="text" id="expNote" required placeholder="Contoh: Makan siang warteg, pulsa, ngopi"
+              <input type="text" id="expNote" required placeholder="Contoh: Makan siang warteg, pulsa, fotokopi"
                 class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             </div>
 
@@ -282,10 +289,63 @@
                 class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             </div>
 
-            <button type="submit" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-sm font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center justify-center gap-2">
+            <button type="submit" class="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white text-sm font-semibold rounded-xl shadow-md shadow-rose-600/20 transition flex items-center justify-center gap-2">
               <i data-lucide="check" class="w-4 h-4"></i> Simpan Pengeluaran
             </button>
           </form>
+
+          <!-- FORM PEMASUKAN TAMBAHAN (Default Hidden) -->
+          <form id="formIncome" class="space-y-4 hidden" onsubmit="handleIncomeSubmit(event)">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Jumlah Pemasukan Tambahan (Rp)</label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-sm font-semibold text-slate-400">Rp</span>
+                <input type="number" id="incAmount" required min="1000" placeholder="Contoh: 100000"
+                  class="w-full pl-10 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              </div>
+              <!-- Quick Chips Income -->
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <button type="button" onclick="setQuickInc(50000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 text-slate-600 dark:text-slate-300 rounded-md transition">+50k</button>
+                <button type="button" onclick="setQuickInc(100000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 text-slate-600 dark:text-slate-300 rounded-md transition">+100k</button>
+                <button type="button" onclick="setQuickInc(200000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 text-slate-600 dark:text-slate-300 rounded-md transition">+200k</button>
+                <button type="button" onclick="setQuickInc(500000)" class="text-[11px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 text-slate-600 dark:text-slate-300 rounded-md transition">+500k</button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Sumber / Keterangan</label>
+              <input type="text" id="incTitle" required placeholder="Contoh: Proyekan freelance, hadiah ultah, beasiswa, jual baju"
+                class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Mau Dialokasikan ke Mana?</label>
+              <select id="incAllocMode" onchange="onIncomeAllocModeChanged(this.value)" class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                <option value="proportional">⚖️ Bagi Otomatis ke Semua Pos (Sesuai % Formula)</option>
+                <option value="direct">🎯 Alokasikan Penuh ke Pos Tertentu Saja</option>
+              </select>
+            </div>
+
+            <!-- Target Category selector if direct -->
+            <div id="incTargetCategoryWrap" class="hidden">
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Pilih Pos Tujuan</label>
+              <select id="incTargetCategory" class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                <!-- Populated dynamically -->
+              </select>
+              <p class="text-[10px] text-slate-400 mt-1">Uang ini akan 100% menambah batas kuota pos yang dipilih.</p>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Tanggal Terima</label>
+              <input type="date" id="incDate" required
+                class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+
+            <button type="submit" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-sm font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i> Simpan & Alokasikan Uang
+            </button>
+          </form>
+
         </div>
 
         <!-- Riwayat Transaksi -->
@@ -294,14 +354,20 @@
             <div>
               <h3 class="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <i data-lucide="history" class="w-4 h-4 text-indigo-500"></i>
-                Riwayat Pengeluaran
+                Riwayat Transaksi
               </h3>
               <p class="text-xs text-slate-500 dark:text-slate-400">Total <span id="txCountBadge">0</span> transaksi di siklus ini</p>
             </div>
 
-            <!-- Filter Category -->
-            <div class="flex items-center gap-2 w-full sm:w-auto">
-              <select id="filterExpCategory" onchange="renderExpenseList()" class="px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none w-full sm:w-auto">
+            <!-- Filters -->
+            <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+              <select id="filterTxType" onchange="renderTransactionList()" class="px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none">
+                <option value="ALL">Semua Jenis</option>
+                <option value="EXPENSE">Pengeluaran Saja</option>
+                <option value="INCOME">Pemasukan Saja</option>
+              </select>
+
+              <select id="filterExpCategory" onchange="renderTransactionList()" class="px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none">
                 <option value="ALL">Semua Pos</option>
               </select>
             </div>
@@ -554,8 +620,8 @@
         <span class="text-[10px] font-medium">Ringkasan</span>
       </button>
       <button onclick="switchTab('expenses')" id="mTabBtn-expenses" class="mobile-tab-btn inactive-m-tab flex flex-col items-center justify-center py-1">
-        <i data-lucide="receipt" class="w-5 h-5 mb-0.5"></i>
-        <span class="text-[10px] font-medium">Catat</span>
+        <i data-lucide="arrow-left-right" class="w-5 h-5 mb-0.5"></i>
+        <span class="text-[10px] font-medium">Transaksi</span>
       </button>
       <button onclick="switchTab('allocation')" id="mTabBtn-allocation" class="mobile-tab-btn inactive-m-tab flex flex-col items-center justify-center py-1">
         <i data-lucide="pie-chart" class="w-5 h-5 mb-0.5"></i>
