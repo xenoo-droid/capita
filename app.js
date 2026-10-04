@@ -36,6 +36,8 @@ const DEFAULT_PROFILE = {
   avatar: 'HR',
   color: '#9d50ff',
   passwordHash: null, // null | string SHA-256 hash
+  cloudSyncKey: 'SENO-7721',
+  updatedAt: 1727952000000,
   capital: 1500000,
   cycle: {
     type: 'monthly', // 'monthly' | 'weekly' | 'custom_days'
@@ -120,6 +122,12 @@ function getActiveProfile() {
   return active;
 }
 
+function generateSyncKey(name = 'CAP') {
+  const clean = (name || 'CAP').replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase() || 'CAP';
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `${clean}-${rand}`;
+}
+
 function syncProfileToState(targetState, profile) {
   targetState.activeProfileId = profile.id;
   targetState.capital = profile.capital !== undefined ? profile.capital : 1500000;
@@ -129,6 +137,8 @@ function syncProfileToState(targetState, profile) {
   targetState.incomes = profile.incomes;
   targetState.analysisTab = profile.analysisTab || 'expense';
   targetState.cycleOffset = profile.cycleOffset || 0;
+  targetState.cloudSyncKey = profile.cloudSyncKey || generateSyncKey(profile.name);
+  targetState.updatedAt = profile.updatedAt || Date.now();
 }
 
 function syncStateToActiveProfile() {
@@ -141,6 +151,8 @@ function syncStateToActiveProfile() {
   active.incomes = state.incomes;
   active.analysisTab = state.analysisTab;
   active.cycleOffset = state.cycleOffset;
+  active.cloudSyncKey = state.cloudSyncKey || active.cloudSyncKey || generateSyncKey(active.name);
+  active.updatedAt = state.updatedAt || active.updatedAt || Date.now();
 }
 
 function normalizeProfile(prof, idx = 0) {
@@ -152,6 +164,10 @@ function normalizeProfile(prof, idx = 0) {
   }
   if (!prof.color) prof.color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
   if (prof.passwordHash === undefined) prof.passwordHash = null;
+  if (!prof.cloudSyncKey) {
+    prof.cloudSyncKey = (idx === 0 && (!prof.name || prof.name === 'Haryo Seno')) ? 'SENO-7721' : generateSyncKey(prof.name);
+  }
+  if (!prof.updatedAt) prof.updatedAt = Date.now();
   if (prof.capital === undefined || isNaN(Number(prof.capital))) prof.capital = 1500000;
   if (!prof.expenses || !Array.isArray(prof.expenses)) prof.expenses = [];
   if (!prof.incomes || !Array.isArray(prof.incomes)) prof.incomes = [];
@@ -258,6 +274,7 @@ function saveState() {
   try {
     syncStateToActiveProfile();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    syncActiveProfileToCloud();
   } catch (e) {
     console.error('Failed to save state to localStorage:', e);
   }
@@ -1792,6 +1809,345 @@ function confirmResetData() {
 }
 
 // ==========================================
+// FIREBASE REALTIME CLOUD SYNC CONFIGURATION
+// ==========================================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDLwh-n0Pa5_kMStx9VD1R05nb6bg2jzTA",
+  authDomain: "capita-app-3e07d.firebaseapp.com",
+  databaseURL: "https://capita-app-3e07d-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "capita-app-3e07d",
+  storageBucket: "capita-app-3e07d.firebasestorage.app",
+  messagingSenderId: "825311846086",
+  appId: "1:825311846086:web:7c7ef7f1f1921accf181c7",
+  measurementId: "G-6Y3M7M9N03"
+};
+
+let firebaseDb = null;
+let isFirebaseReady = false;
+let activeCloudListenerRef = null;
+let isRemoteSyncInProgress = false;
+let cloudPushDebounceTimer = null;
+
+function initFirebase() {
+  if (typeof window === 'undefined') return;
+  try {
+    if (window.firebase && firebase.initializeApp) {
+      if (!firebase.apps || !firebase.apps.length) {
+        firebase.initializeApp(FIREBASE_CONFIG);
+      }
+      firebaseDb = firebase.database();
+      isFirebaseReady = true;
+      console.log('Firebase Realtime Database successfully initialized!');
+      updateCloudStatusUI('connected');
+    } else {
+      console.warn('Firebase SDK not loaded yet.');
+      updateCloudStatusUI('offline');
+    }
+  } catch (err) {
+    console.warn('Firebase init warning:', err);
+    updateCloudStatusUI('offline');
+  }
+}
+
+function updateCloudStatusUI(status = 'connected') {
+  const badge = document.getElementById('cloudSyncStatusBadge');
+  const desktopText = document.getElementById('desktopCloudStatusText');
+  const desktopDot = document.getElementById('desktopCloudDot');
+
+  if (status === 'connected') {
+    if (badge) badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Realtime Database Terhubung';
+    if (desktopText) desktopText.innerText = 'Cloud Terhubung';
+    if (desktopDot) {
+      desktopDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse';
+    }
+  } else if (status === 'syncing') {
+    if (badge) badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping"></span> Menyinkronkan...';
+    if (desktopText) desktopText.innerText = 'Syncing...';
+    if (desktopDot) {
+      desktopDot.className = 'w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping';
+    }
+  } else if (status === 'synced') {
+    if (badge) badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Tersinkron Otomatis';
+    if (desktopText) desktopText.innerText = 'Cloud Sync';
+    if (desktopDot) {
+      desktopDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+    }
+  } else {
+    if (badge) badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Mode Offline (Lokal)';
+    if (desktopText) desktopText.innerText = 'Offline';
+    if (desktopDot) {
+      desktopDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400';
+    }
+  }
+}
+
+function syncActiveProfileToCloud(isImmediate = false) {
+  if (!isFirebaseReady || !firebaseDb) return;
+  if (isRemoteSyncInProgress) return;
+
+  const active = getActiveProfile();
+  if (!active) return;
+  if (!active.cloudSyncKey) {
+    active.cloudSyncKey = generateSyncKey(active.name);
+  }
+
+  active.updatedAt = Date.now();
+
+  const doPush = () => {
+    try {
+      updateCloudStatusUI('syncing');
+      const payload = {
+        syncKey: active.cloudSyncKey,
+        updatedAt: active.updatedAt,
+        profile: {
+          id: active.id,
+          name: active.name,
+          role: active.role,
+          avatar: active.avatar,
+          color: active.color,
+          capital: active.capital,
+          passwordHash: active.passwordHash,
+          cloudSyncKey: active.cloudSyncKey,
+          cycle: active.cycle,
+          categories: active.categories,
+          expenses: active.expenses,
+          incomes: active.incomes,
+          analysisTab: active.analysisTab,
+          cycleOffset: active.cycleOffset,
+          updatedAt: active.updatedAt
+        }
+      };
+
+      firebaseDb.ref('capita_sync/' + active.cloudSyncKey).set(payload, (err) => {
+        if (!err) {
+          updateCloudStatusUI('synced');
+        } else {
+          console.warn('Firebase set error:', err);
+          updateCloudStatusUI('offline');
+        }
+      });
+    } catch (e) {
+      console.warn('Sync to cloud error:', e);
+      updateCloudStatusUI('offline');
+    }
+  };
+
+  if (isImmediate) {
+    clearTimeout(cloudPushDebounceTimer);
+    doPush();
+  } else {
+    clearTimeout(cloudPushDebounceTimer);
+    cloudPushDebounceTimer = setTimeout(doPush, 600);
+  }
+}
+
+function attachCloudListenerForActiveProfile() {
+  if (!isFirebaseReady || !firebaseDb) return;
+  const active = getActiveProfile();
+  if (!active || !active.cloudSyncKey) return;
+
+  if (activeCloudListenerRef) {
+    try { activeCloudListenerRef.off(); } catch (e) {}
+    activeCloudListenerRef = null;
+  }
+
+  const syncKey = active.cloudSyncKey;
+  activeCloudListenerRef = firebaseDb.ref('capita_sync/' + syncKey);
+
+  activeCloudListenerRef.on('value', (snapshot) => {
+    const val = snapshot.val();
+    if (!val || !val.profile) return;
+
+    const cloudUpdatedAt = val.updatedAt || 0;
+    const localUpdatedAt = active.updatedAt || 0;
+
+    // Jika data dari cloud lebih baru setidaknya 600ms dari data lokal
+    if (cloudUpdatedAt > localUpdatedAt + 600) {
+      isRemoteSyncInProgress = true;
+      try {
+        const cloudProf = val.profile;
+        active.name = cloudProf.name || active.name;
+        active.role = cloudProf.role || active.role;
+        active.avatar = cloudProf.avatar || active.avatar;
+        active.color = cloudProf.color || active.color;
+        active.capital = cloudProf.capital !== undefined ? cloudProf.capital : active.capital;
+        active.passwordHash = cloudProf.passwordHash !== undefined ? cloudProf.passwordHash : active.passwordHash;
+        active.cycle = cloudProf.cycle || active.cycle;
+        active.categories = cloudProf.categories || active.categories;
+        active.expenses = cloudProf.expenses || active.expenses;
+        active.incomes = cloudProf.incomes || active.incomes;
+        active.updatedAt = cloudUpdatedAt;
+
+        syncProfileToState(state, active);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {}
+
+        updateUI();
+        showToast('☁️ Data tersinkron dari perangkat lain!');
+      } finally {
+        setTimeout(() => { isRemoteSyncInProgress = false; }, 800);
+      }
+    }
+  }, (err) => {
+    console.warn('Firebase Realtime listener error:', err);
+  });
+}
+
+function openCloudSyncModal(initialTab = 'share') {
+  const modal = document.getElementById('modalCloudSync');
+  if (!modal) return;
+
+  const active = getActiveProfile();
+  if (!active.cloudSyncKey) {
+    active.cloudSyncKey = generateSyncKey(active.name);
+    saveState();
+  }
+
+  const nameEl = document.getElementById('cloudShareProfName');
+  const codeEl = document.getElementById('cloudSyncCodeDisplay');
+  if (nameEl) nameEl.innerText = active.name;
+  if (codeEl) codeEl.innerText = active.cloudSyncKey;
+
+  switchCloudSyncTab(initialTab);
+  modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeCloudSyncModal() {
+  document.getElementById('modalCloudSync')?.classList.add('hidden');
+}
+
+function switchCloudSyncTab(tab) {
+  const tabShare = document.getElementById('cloudTabShare');
+  const tabConnect = document.getElementById('cloudTabConnect');
+  const contentShare = document.getElementById('cloudContentShare');
+  const contentConnect = document.getElementById('cloudContentConnect');
+
+  if (tab === 'share') {
+    if (tabShare) {
+      tabShare.className = 'flex-1 py-1.5 rounded-lg font-semibold transition text-center bg-purple-600 text-white shadow-sm';
+    }
+    if (tabConnect) {
+      tabConnect.className = 'flex-1 py-1.5 rounded-lg font-semibold transition text-center text-[#9f96b5] hover:text-white';
+    }
+    contentShare?.classList.remove('hidden');
+    contentConnect?.classList.add('hidden');
+  } else {
+    if (tabShare) {
+      tabShare.className = 'flex-1 py-1.5 rounded-lg font-semibold transition text-center text-[#9f96b5] hover:text-white';
+    }
+    if (tabConnect) {
+      tabConnect.className = 'flex-1 py-1.5 rounded-lg font-semibold transition text-center bg-purple-600 text-white shadow-sm';
+    }
+    contentShare?.classList.add('hidden');
+    contentConnect?.classList.remove('hidden');
+    setTimeout(() => document.getElementById('cloudInputSyncCode')?.focus(), 150);
+  }
+}
+
+function copyCloudSyncCode() {
+  const active = getActiveProfile();
+  const code = active.cloudSyncKey || 'SENO-7721';
+  if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => {
+      showToast(`Kode "${code}" berhasil disalin! 📋`);
+    }).catch(() => {
+      prompt('Salin Kode Sinkronisasi:', code);
+    });
+  } else {
+    prompt('Salin Kode Sinkronisasi:', code);
+  }
+}
+
+function manualTriggerCloudSync() {
+  syncActiveProfileToCloud(true);
+  showToast('☁️ Sinkronisasi ke Cloud berhasil dijalankan!');
+}
+
+async function submitConnectCloudProfile() {
+  if (!isFirebaseReady || !firebaseDb) {
+    alert('Koneksi ke Firebase Database sedang tidak tersedia. Periksa koneksi internet Anda.');
+    return;
+  }
+
+  const inputSyncCode = document.getElementById('cloudInputSyncCode')?.value?.trim().toUpperCase();
+  const inputPin = document.getElementById('cloudInputPin')?.value?.trim() || '';
+  const errEl = document.getElementById('cloudConnectError');
+  const errText = document.getElementById('cloudConnectErrorText');
+  const btn = document.getElementById('cloudConnectBtn');
+
+  if (!inputSyncCode) {
+    if (errEl && errText) {
+      errText.innerText = 'Harap masukkan Kode Sinkronisasi!';
+      errEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Menghubungkan ke Cloud...';
+    if (window.lucide) lucide.createIcons();
+  }
+
+  try {
+    const snapshot = await firebaseDb.ref('capita_sync/' + inputSyncCode).once('value');
+    const data = snapshot.val();
+
+    if (!data || !data.profile) {
+      if (errEl && errText) {
+        errText.innerText = `Kode "${inputSyncCode}" tidak ditemukan di database cloud! Pastikan kode sudah benar.`;
+        errEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const cloudProf = data.profile;
+
+    // Verifikasi PIN jika profil cloud dilindungi password
+    if (cloudProf.passwordHash) {
+      const pinHash = await hashPassword(inputPin);
+      if (pinHash !== cloudProf.passwordHash) {
+        if (errEl && errText) {
+          errText.innerText = 'PIN/Password profil salah! Harap masukkan PIN yang benar.';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+    }
+
+    // Sukses! Masukkan atau perbarui profil ke daftar profil lokal
+    let localProf = state.profiles.find(p => p.cloudSyncKey === inputSyncCode || p.id === cloudProf.id);
+    if (!localProf) {
+      localProf = { ...cloudProf };
+      state.profiles.push(localProf);
+    } else {
+      Object.assign(localProf, cloudProf);
+    }
+
+    unlockProfileSession(localProf.id);
+    doSwitchProfile(localProf.id);
+    closeCloudSyncModal();
+    closeProfileSwitchModal();
+
+    showToast(`Profil "${localProf.name}" berhasil terhubung dari Cloud! ☁️🎉`);
+    alert(`Berhasil! Profil "${localProf.name}" kini tersinkronisasi otomatis antar perangkat.`);
+  } catch (err) {
+    if (errEl && errText) {
+      errText.innerText = 'Gagal mengambil data dari cloud: ' + err.message;
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="cloud-download" class="w-4 h-4"></i> Hubungkan & Tarik Data Cloud';
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+
+// ==========================================
 // MULTI-PROFILE, SECURITY & PASSWORD MANAGEMENT
 // ==========================================
 
@@ -2188,6 +2544,8 @@ function doSwitchProfile(profileId) {
   saveState();
   closeProfileSwitchModal();
   closeUnprotectedProfileModal();
+  attachCloudListenerForActiveProfile();
+  syncActiveProfileToCloud(true);
   updateUI();
   checkLockScreenState();
   showToast(`Beralih ke profil "${target.name}"`);
@@ -2217,14 +2575,17 @@ function createProfile(name, role, avatar, color, initialCapital, templateKey, p
     ];
   }
 
+  const cleanName = name.trim() || 'Pengguna Baru';
   const newProf = {
     id: newId,
-    name: name.trim() || 'Pengguna Baru',
+    name: cleanName,
     role: role.trim() || 'Personal',
-    avatar: avatar.trim() || (name.trim().substring(0, 2).toUpperCase() || '👤'),
+    avatar: avatar.trim() || (cleanName.substring(0, 2).toUpperCase() || '👤'),
     color: color || '#818cf8',
     capital: cap,
     passwordHash: passwordHash || null,
+    cloudSyncKey: generateSyncKey(cleanName),
+    updatedAt: Date.now(),
     cycle: {
       type: 'monthly',
       monthlyStartDay: 1,
@@ -2831,6 +3192,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Set default analysis tab
   setAnalysisTab(state.analysisTab || 'expense');
+
+  // Firebase Realtime Cloud Sync
+  initFirebase();
+  attachCloudListenerForActiveProfile();
+  syncActiveProfileToCloud(true);
 
   updateUI();
   checkLockScreenState();
