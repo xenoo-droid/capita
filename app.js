@@ -1812,14 +1812,14 @@ function confirmResetData() {
 // FIREBASE REALTIME CLOUD SYNC CONFIGURATION
 // ==========================================
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyDLwh-n0Pa5_kMStx9VD1R05nb6bg2jzTA",
+  apiKey: "AIzaSyDLwh-n0Pa5_kHStx9VD1RO5nb6bg2jzTA",
   authDomain: "capita-app-3e07d.firebaseapp.com",
   databaseURL: "https://capita-app-3e07d-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "capita-app-3e07d",
   storageBucket: "capita-app-3e07d.firebasestorage.app",
   messagingSenderId: "825311846086",
   appId: "1:825311846086:web:7c7ef7f1f1921accf181c7",
-  measurementId: "G-6Y3M7M9N03"
+  measurementId: "G-6Y3M7N9H03"
 };
 
 let firebaseDb = null;
