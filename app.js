@@ -403,11 +403,14 @@ function getCurrentCycleIncomes() {
 // ==========================================
 
 function getCategoryBudgets(currentIncomes) {
-  // 1. Total nominal Rupiah dari seluruh pos alokasi
+  // 1. Total nominal Rupiah dari seluruh pos alokasi (Auto-Calculating Base Capital)
   const totalBasePos = state.categories.reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
   
-  // Jika state.capital belum diatur atau lebih kecil dari total pos, sesuaikan dengan totalBasePos
-  const baseCapital = Math.max(Number(state.capital) || 0, totalBasePos);
+  // Base Capital otomatis selalu tersambung dengan jumlah pos alokasi
+  const baseCapital = totalBasePos;
+  state.capital = totalBasePos;
+  const activeProf = typeof getActiveProfile === 'function' ? getActiveProfile() : null;
+  if (activeProf) activeProf.capital = totalBasePos;
 
   // 2. Persentase otomatis dihitung berdasarkan proporsi nominal pos
   state.categories.forEach(cat => {
@@ -533,6 +536,17 @@ function updateUI() {
 
   if (elDailySafe) elDailySafe.innerHTML = `${formatIDR(dailySafe)}<span class="text-xs font-normal text-purple-300">/hari</span>`;
   if (elRemainingDays) elRemainingDays.innerText = `Sisa ${remainingDays} hari di siklus ini`;
+
+  // Live auto-calculated Capital Pool elements in Dompet/Allocation Tab
+  const elAutoCapDisplay = document.getElementById('autoCapitalPoolDisplay');
+  const elCalcBasePos = document.getElementById('calcBasePosSum');
+  const elCalcExtraIncome = document.getElementById('calcExtraIncomeSum');
+  const elCalcRemainingCash = document.getElementById('calcRemainingCashSum');
+
+  if (elAutoCapDisplay) elAutoCapDisplay.innerText = formatIDR(effectiveCapital);
+  if (elCalcBasePos) elCalcBasePos.innerText = formatIDR(budgetInfo.totalBasePos);
+  if (elCalcExtraIncome) elCalcExtraIncome.innerText = (budgetInfo.totalExtra > 0 ? '+' : '') + formatIDR(budgetInfo.totalExtra);
+  if (elCalcRemainingCash) elCalcRemainingCash.innerText = formatIDR(remaining);
 
   // Render Multi-Color Donut & Overview Charts
   renderCharts(currentExpenses, currentIncomes, budgetInfo);
@@ -1333,41 +1347,45 @@ function setQuickCapital(val) {
 function syncCapitalWithTotalPos() {
   const totalBasePos = state.categories.reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
   state.capital = totalBasePos;
+  const activeProf = typeof getActiveProfile === 'function' ? getActiveProfile() : null;
+  if (activeProf) activeProf.capital = totalBasePos;
   saveState();
   updateUI();
 }
 
 function applyPreset(presetKey) {
-  const cap = Number(state.capital) || 1500000;
+  const currentTotal = state.categories.reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
+  const base = currentTotal > 0 ? currentTotal : 1500000;
+  const now = Date.now();
   const presets = {
     standard_student: [
-      { id: 'cat-needs', name: 'Kosan', targetAmount: Math.round(cap * 0.35), color: '#f87171', emoji: '🏠' },
-      { id: 'cat-daily', name: 'Makan & Harian', targetAmount: Math.round(cap * 0.30), color: '#fbbf24', emoji: '🍜' },
-      { id: 'cat-study', name: 'Kebutuhan Kuliah', targetAmount: Math.round(cap * 0.15), color: '#38bdf8', emoji: '📚' },
-      { id: 'cat-wants', name: 'Nongkrong & Hiburan', targetAmount: Math.round(cap * 0.10), color: '#a78bfa', emoji: '☕' },
-      { id: 'cat-save', name: 'Tabungan & Dana Darurat', targetAmount: Math.round(cap * 0.10), color: '#34d399', emoji: '💰' }
+      { id: 'cat-needs-' + now + '-1', name: 'Kosan', targetAmount: Math.round(base * 0.35), color: '#f87171', emoji: '🏠' },
+      { id: 'cat-daily-' + now + '-2', name: 'Makan & Harian', targetAmount: Math.round(base * 0.30), color: '#fbbf24', emoji: '🍜' },
+      { id: 'cat-study-' + now + '-3', name: 'Kebutuhan Kuliah', targetAmount: Math.round(base * 0.15), color: '#38bdf8', emoji: '📚' },
+      { id: 'cat-wants-' + now + '-4', name: 'Nongkrong & Hiburan', targetAmount: Math.round(base * 0.10), color: '#a78bfa', emoji: '☕' },
+      { id: 'cat-save-' + now + '-5', name: 'Tabungan & Dana Darurat', targetAmount: Math.round(base * 0.10), color: '#34d399', emoji: '💰' }
     ],
     rule_50_30_20: [
-      { id: 'cat-needs', name: 'Needs / Kebutuhan Pokok', targetAmount: Math.round(cap * 0.50), color: '#38bdf8', emoji: '🏠' },
-      { id: 'cat-wants', name: 'Wants / Hiburan & Nongkrong', targetAmount: Math.round(cap * 0.30), color: '#f472b6', emoji: '☕' },
-      { id: 'cat-save', name: 'Savings / Tabungan Masa Depan', targetAmount: Math.round(cap * 0.20), color: '#34d399', emoji: '💰' }
+      { id: 'cat-needs-' + now + '-1', name: 'Needs / Kebutuhan Pokok', targetAmount: Math.round(base * 0.50), color: '#38bdf8', emoji: '🏠' },
+      { id: 'cat-wants-' + now + '-2', name: 'Wants / Hiburan & Nongkrong', targetAmount: Math.round(base * 0.30), color: '#f472b6', emoji: '☕' },
+      { id: 'cat-save-' + now + '-3', name: 'Savings / Tabungan Masa Depan', targetAmount: Math.round(base * 0.20), color: '#34d399', emoji: '💰' }
     ],
     frugal: [
-      { id: 'cat-daily', name: 'Makan Pokok (Hemat)', targetAmount: Math.round(cap * 0.65), color: '#fbbf24', emoji: '🍜' },
-      { id: 'cat-transport', name: 'Transport & Bensin', targetAmount: Math.round(cap * 0.10), color: '#38bdf8', emoji: '🛵' },
-      { id: 'cat-save', name: 'Dana Darurat & Tabungan', targetAmount: Math.round(cap * 0.25), color: '#34d399', emoji: '🚨' }
+      { id: 'cat-daily-' + now + '-1', name: 'Makan Pokok (Hemat)', targetAmount: Math.round(base * 0.65), color: '#fbbf24', emoji: '🍜' },
+      { id: 'cat-transport-' + now + '-2', name: 'Transport & Bensin', targetAmount: Math.round(base * 0.10), color: '#38bdf8', emoji: '🛵' },
+      { id: 'cat-save-' + now + '-3', name: 'Dana Darurat & Tabungan', targetAmount: Math.round(base * 0.25), color: '#34d399', emoji: '🚨' }
     ],
     weekly_compact: [
-      { id: 'cat-daily', name: 'Operasional Harian', targetAmount: Math.round(cap * 0.60), color: '#fbbf24', emoji: '🍜' },
-      { id: 'cat-weekend', name: 'Weekend / Jajan Santai', targetAmount: Math.round(cap * 0.25), color: '#a78bfa', emoji: '☕' },
-      { id: 'cat-reserve', name: 'Cadangan Simpanan', targetAmount: Math.round(cap * 0.15), color: '#34d399', emoji: '💰' }
+      { id: 'cat-daily-' + now + '-1', name: 'Operasional Harian', targetAmount: Math.round(base * 0.60), color: '#fbbf24', emoji: '🍜' },
+      { id: 'cat-weekend-' + now + '-2', name: 'Weekend / Jajan Santai', targetAmount: Math.round(base * 0.25), color: '#a78bfa', emoji: '☕' },
+      { id: 'cat-reserve-' + now + '-3', name: 'Cadangan Simpanan', targetAmount: Math.round(base * 0.15), color: '#34d399', emoji: '💰' }
     ]
   };
 
   if (presets[presetKey]) {
     state.categories = JSON.parse(JSON.stringify(presets[presetKey]));
-    saveState();
-    updateUI();
+    syncCapitalWithTotalPos();
+    showToast('Template pos alokasi berhasil diterapkan! 🎯');
   }
 }
 
@@ -1377,8 +1395,7 @@ function updateCategoryNominal(catId, newVal) {
   const cat = state.categories.find(c => c.id === catId);
   if (cat) {
     cat.targetAmount = num;
-    saveState();
-    updateUI();
+    syncCapitalWithTotalPos();
   }
 }
 
@@ -1398,8 +1415,7 @@ function deleteCategory(catId) {
   }
   if (confirm('Hapus pos alokasi ini? Transaksi pada pos ini tetap ada di riwayat.')) {
     state.categories = state.categories.filter(c => c.id !== catId);
-    saveState();
-    updateUI();
+    syncCapitalWithTotalPos();
   }
 }
 
@@ -1650,9 +1666,8 @@ function saveCategoryModal() {
     });
   }
 
-  saveState();
   closeCategoryModal();
-  updateUI();
+  syncCapitalWithTotalPos();
 }
 
 // ==========================================
@@ -1890,17 +1905,8 @@ function applyMarkdownAllocation() {
     });
   }
 
-  // Update total capital pool if requested
-  if (shouldUpdateCapital && total > 0) {
-    state.capital = total;
-    const activeProf = getActiveProfile();
-    if (activeProf) activeProf.capital = total;
-    const inputCapital = document.getElementById('inputCapital');
-    if (inputCapital) inputCapital.value = total;
-  }
-
-  saveState();
-  updateUI();
+  // Capital pool automatically syncs with the new categories
+  syncCapitalWithTotalPos();
   closeMarkdownAllocationModal();
   showToast(`🎉 Berhasil menerapkan ${items.length} pos alokasi dari Markdown!`);
 }

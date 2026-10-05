@@ -574,55 +574,81 @@
            ============================================== -->
       <div id="tabContent-allocation" class="tab-panel hidden space-y-6">
         
-        <!-- Total Capital Config -->
+        <!-- Total Capital Live Connected Hub (Auto-Calculating) -->
         <div class="alloc-card p-5 space-y-4">
-          <div>
-            <h3 class="font-bold text-white text-base flex items-center gap-2">
-              <i data-lucide="sliders" class="w-4 h-4 text-purple-400"></i>
-              Konfigurasi Total Capital Pool
-            </h3>
-            <p class="text-xs text-[#9f96b5]">Tentukan total dana/uang saku rutin yang kamu miliki untuk dialokasikan</p>
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 class="font-bold text-white text-base flex items-center gap-2">
+                <i data-lucide="calculator" class="w-4 h-4 text-purple-400"></i>
+                Total Capital Pool (Terkalkulasi Otomatis)
+              </h3>
+              <p class="text-xs text-[#9f96b5]">Otomatis tersambung dengan jatah pos alokasi serta transaksi pemasukan/pengeluaran.</p>
+            </div>
+            <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 w-fit">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Auto-Calculated
+            </span>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
-            <div>
-              <label class="block text-xs font-semibold text-[#9f96b5] mb-1">
-                Total Uang Saku Rutin (<span id="allocCycleText" class="text-purple-300">Bulanan</span>)
-              </label>
-              <div class="relative">
-                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-sm font-semibold text-[#6f6585]">Rp</span>
-                <input type="number" id="inputCapital" min="0" step="10000" placeholder="1500000"
-                  class="w-full pl-11 pr-3 py-2.5 text-base font-bold bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white"
-                  oninput="onCapitalChanged(this.value)">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
+            <!-- Left: Live Connected Capital Calculation Card -->
+            <div class="p-4 rounded-xl bg-[#150d28] border border-[#2d1f50] flex flex-col justify-between space-y-3">
+              <div>
+                <p class="text-xs text-[#9f96b5] font-medium">Total Capital Pool Aktif (<span id="allocCycleText" class="text-purple-300 font-bold">Bulanan</span>):</p>
+                <div class="flex items-baseline gap-2 mt-1">
+                  <h2 id="autoCapitalPoolDisplay" class="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    Rp 0
+                  </h2>
+                </div>
               </div>
-              <div class="flex flex-wrap gap-1.5 mt-2">
-                <button type="button" onclick="setQuickCapital(500000)" class="text-[11px] py-1 px-2.5 bg-[#150d28] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">500rb</button>
-                <button type="button" onclick="setQuickCapital(1000000)" class="text-[11px] py-1 px-2.5 bg-[#150d28] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">1 Juta</button>
-                <button type="button" onclick="setQuickCapital(1500000)" class="text-[11px] py-1 px-2.5 bg-[#150d28] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">1.5 Juta</button>
-                <button type="button" onclick="setQuickCapital(2000000)" class="text-[11px] py-1 px-2.5 bg-[#150d28] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">2 Juta</button>
+
+              <!-- Realtime Breakdown Formulas -->
+              <div class="pt-2 border-t border-[#2d1f50]/60 grid grid-cols-3 gap-2 text-center">
+                <div class="p-2 rounded-lg bg-[#1b1232] border border-[#2d1f50]">
+                  <p class="text-[10px] text-[#9f96b5]">∑ Jatah Pos</p>
+                  <p id="calcBasePosSum" class="font-extrabold text-white text-xs mt-0.5">Rp 0</p>
+                </div>
+                <div class="p-2 rounded-lg bg-emerald-950/20 border border-emerald-800/30">
+                  <p class="text-[10px] text-emerald-400">+ Pemasukan</p>
+                  <p id="calcExtraIncomeSum" class="font-extrabold text-emerald-400 text-xs mt-0.5">+Rp 0</p>
+                </div>
+                <div class="p-2 rounded-lg bg-purple-950/30 border border-purple-800/30">
+                  <p class="text-[10px] text-purple-300">Sisa Kas</p>
+                  <p id="calcRemainingCashSum" class="font-extrabold text-purple-300 text-xs mt-0.5">Rp 0</p>
+                </div>
               </div>
+
+              <p class="text-[11px] text-[#6f6585] flex items-center gap-1.5">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-400 shrink-0"></i>
+                <span>User tidak perlu input manual — nominal pool otomatis menyesuaikan daftar pos & transaksi.</span>
+              </p>
             </div>
 
-            <div>
-              <label class="block text-xs font-semibold text-[#9f96b5] mb-1.5">
-                Template Formula Alokasi Siap Pakai
-              </label>
+            <!-- Right: Preset Templates -->
+            <div class="p-4 rounded-xl bg-[#150d28] border border-[#2d1f50] flex flex-col justify-between space-y-2.5">
+              <div>
+                <label class="block text-xs font-semibold text-[#9f96b5] mb-1">
+                  Atur Cepat Formula Pos Alokasi
+                </label>
+                <p class="text-[11px] text-[#6f6585]">Pilih salah satu template jika ingin mengatur komposisi pos secara instan:</p>
+              </div>
+
               <div class="grid grid-cols-2 gap-2">
-                <button type="button" onclick="applyPreset('standard_student')" class="p-2.5 text-left rounded-xl border border-[#2d1f50] hover:border-purple-500 bg-[#150d28] transition">
+                <button type="button" onclick="applyPreset('standard_student')" class="p-2.5 text-left rounded-xl border border-[#2d1f50] hover:border-purple-500 bg-[#1b1232] transition">
                   <p class="text-xs font-bold text-purple-400">Anak Kos Realistis</p>
-                  <p class="text-[10px] text-[#9f96b5] mt-0.5">50% Makan, 20% Kuliah, 15% Nongkrong, 15% Tabungan</p>
+                  <p class="text-[10px] text-[#9f96b5] mt-0.5">5 Pos: Makan, Kosan, Kuliah, Hiburan, Tabungan</p>
                 </button>
-                <button type="button" onclick="applyPreset('rule_50_30_20')" class="p-2.5 text-left rounded-xl border border-[#2d1f50] hover:border-purple-500 bg-[#150d28] transition">
-                  <p class="text-xs font-bold text-lavender-400 text-[#b388ff]">Rule 50/30/20</p>
-                  <p class="text-[10px] text-[#9f96b5] mt-0.5">50% Needs, 30% Wants, 20% Savings</p>
+                <button type="button" onclick="applyPreset('rule_50_30_20')" class="p-2.5 text-left rounded-xl border border-[#2d1f50] hover:border-purple-500 bg-[#1b1232] transition">
+                  <p class="text-xs font-bold text-[#b388ff]">Rule 50/30/20</p>
+                  <p class="text-[10px] text-[#9f96b5] mt-0.5">3 Pos: Needs (50%), Wants (30%), Savings (20%)</p>
                 </button>
-                <button type="button" onclick="applyPreset('frugal')" class="p-2.5 text-left rounded-xl border border-[#2d1f50] hover:border-purple-500 bg-[#150d28] transition">
+                <button type="button" onclick="applyPreset('frugal')" class="p-2.5 text-left rounded-xl border border-[#2d1f50] hover:border-purple-500 bg-[#1b1232] transition">
                   <p class="text-xs font-bold text-emerald-400">Mode Survival</p>
-                  <p class="text-[10px] text-[#9f96b5] mt-0.5">65% Pokok, 10% Jajan, 25% Tabungan</p>
+                  <p class="text-[10px] text-[#9f96b5] mt-0.5">3 Pos: Makan Pokok, Bensin, Tabungan</p>
                 </button>
-                <button type="button" onclick="applyPreset('weekly_compact')" class="p-2.5 text-left rounded-xl border border-[#2d1f50] hover:border-purple-500 bg-[#150d28] transition">
+                <button type="button" onclick="applyPreset('weekly_compact')" class="p-2.5 text-left rounded-xl border border-[#2d1f50] hover:border-purple-500 bg-[#1b1232] transition">
                   <p class="text-xs font-bold text-amber-400">Simpel 3 Pos</p>
-                  <p class="text-[10px] text-[#9f96b5] mt-0.5">60% Harian, 25% Jajan, 15% Simpanan</p>
+                  <p class="text-[10px] text-[#9f96b5] mt-0.5">Operasional Harian, Jajan, Simpanan</p>
                 </button>
               </div>
             </div>
@@ -1630,6 +1656,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=3.2"></script>
+  <script src="app.js?v=3.3"></script>
 </body>
 </html>
