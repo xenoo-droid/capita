@@ -1656,6 +1656,420 @@ function saveCategoryModal() {
 }
 
 // ==========================================
+// MARKDOWN TABLE ALLOCATION (IMPORT & EXPORT)
+// ==========================================
+
+let currentParsedMarkdownAlloc = null;
+
+function openMarkdownAllocationModal(initialTab = 'import') {
+  const modal = document.getElementById('modalMarkdownAlloc');
+  if (!modal) return;
+
+  switchMarkdownAllocTab(initialTab);
+
+  const input = document.getElementById('mdAllocInput');
+  if (input && !input.value.trim()) {
+    setMarkdownAllocTemplate('student');
+  } else {
+    onMarkdownAllocInputChange();
+  }
+
+  modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeMarkdownAllocationModal() {
+  const modal = document.getElementById('modalMarkdownAlloc');
+  if (modal) modal.classList.add('hidden');
+}
+
+function switchMarkdownAllocTab(tab) {
+  const tabImport = document.getElementById('mdAllocTabImport');
+  const tabExport = document.getElementById('mdAllocTabExport');
+  const contentImport = document.getElementById('mdAllocContentImport');
+  const contentExport = document.getElementById('mdAllocContentExport');
+
+  if (tab === 'import') {
+    if (tabImport) tabImport.className = 'flex-1 py-1.5 rounded-lg font-semibold transition text-center bg-purple-600 text-white shadow-sm';
+    if (tabExport) tabExport.className = 'flex-1 py-1.5 rounded-lg font-semibold transition text-center text-[#9f96b5] hover:text-white';
+    contentImport?.classList.remove('hidden');
+    contentExport?.classList.add('hidden');
+  } else {
+    if (tabImport) tabImport.className = 'flex-1 py-1.5 rounded-lg font-semibold transition text-center text-[#9f96b5] hover:text-white';
+    if (tabExport) tabExport.className = 'flex-1 py-1.5 rounded-lg font-semibold transition text-center bg-purple-600 text-white shadow-sm';
+    contentImport?.classList.add('hidden');
+    contentExport?.classList.remove('hidden');
+    updateMarkdownExportView();
+  }
+}
+
+function updateMarkdownExportView() {
+  const exportText = document.getElementById('mdAllocExportText');
+  if (exportText) {
+    exportText.value = generateCategoriesMarkdown(state.categories);
+  }
+}
+
+function generateCategoriesMarkdown(categories) {
+  if (!categories || categories.length === 0) return 'Tidak ada pos alokasi.';
+  const totalNominal = categories.reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
+
+  let md = '| Pos Alokasi | Nominal (Rp) | Persentase | Emote |\n';
+  md += '| :--- | :--- | :---: | :---: |\n';
+
+  categories.forEach(cat => {
+    const amt = Number(cat.targetAmount) || 0;
+    const pct = totalNominal > 0 ? Math.round((amt / totalNominal) * 100) : 0;
+    md += `| ${cat.name} | ${formatIDR(amt)} | ${pct}% | ${cat.emoji || '📁'} |\n`;
+  });
+
+  md += `| **Total Alokasi** | **${formatIDR(totalNominal)}** | **100%** | 💰 |\n`;
+  return md;
+}
+
+function copyCategoriesMarkdown() {
+  const exportText = document.getElementById('mdAllocExportText');
+  const text = exportText ? exportText.value : generateCategoriesMarkdown(state.categories);
+
+  if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Tabel markdown berhasil disalin ke clipboard! 📋');
+    }).catch(() => {
+      prompt('Salin tabel markdown:', text);
+    });
+  } else {
+    prompt('Salin tabel markdown:', text);
+  }
+}
+
+function setMarkdownAllocTemplate(type) {
+  const input = document.getElementById('mdAllocInput');
+  if (!input) return;
+
+  if (type === 'student') {
+    input.value = `| Pos Alokasi | Nominal | Emote |
+| :--- | :--- | :---: |
+| Kosan & Listrik | Rp 550.000 | 🏠 |
+| Makan & Harian | Rp 500.000 | 🍜 |
+| Kebutuhan Kuliah | Rp 200.000 | 📚 |
+| Nongkrong & Kopi | Rp 150.000 | ☕ |
+| Tabungan & Darurat | Rp 200.000 | 💰 |`;
+  } else if (type === 'rule503020') {
+    input.value = `| Pos Alokasi | Persentase | Emote |
+| :--- | :---: | :---: |
+| Needs / Kebutuhan Pokok | 50% | 🏠 |
+| Wants / Hiburan & Nongkrong | 30% | ☕ |
+| Savings / Tabungan Masa Depan | 20% | 💰 |`;
+  } else if (type === 'frugal') {
+    input.value = `| Pos Alokasi | Nominal | Emote |
+| :--- | :--- | :---: |
+| Makan & Harian Hemat | Rp 450.000 | 🍜 |
+| Kosan & Tempat Tinggal | Rp 450.000 | 🏠 |
+| Bensin & Transport | Rp 100.000 | 🛵 |
+| Tabungan Disiplin | Rp 250.000 | 💰 |`;
+  }
+
+  onMarkdownAllocInputChange();
+}
+
+function clearMarkdownAllocInput() {
+  const input = document.getElementById('mdAllocInput');
+  if (input) {
+    input.value = '';
+    onMarkdownAllocInputChange();
+    input.focus();
+  }
+}
+
+function onMarkdownAllocInputChange() {
+  const text = document.getElementById('mdAllocInput')?.value || '';
+  const parsed = parseMarkdownAllocationTable(text, Number(state.capital) || 1500000);
+  currentParsedMarkdownAlloc = parsed;
+  renderMarkdownAllocPreview(parsed);
+}
+
+function renderMarkdownAllocPreview(parsed) {
+  const badgeDetected = document.getElementById('mdAllocDetectedBadge');
+  const badgeTotal = document.getElementById('mdAllocTotalBadge');
+  const itemsContainer = document.getElementById('mdAllocPreviewItems');
+  const capitalSyncText = document.getElementById('mdAllocCapitalSyncText');
+  const btnApply = document.getElementById('btnApplyMarkdownAlloc');
+
+  if (!itemsContainer) return;
+
+  if (!parsed || !parsed.success || parsed.items.length === 0) {
+    if (badgeDetected) badgeDetected.innerText = '0 Pos';
+    if (badgeTotal) badgeTotal.innerText = 'Total: Rp 0';
+    if (capitalSyncText) capitalSyncText.innerText = 'Rp 0';
+    if (btnApply) {
+      btnApply.disabled = true;
+      btnApply.innerHTML = '<i data-lucide="alert-circle" class="w-4 h-4"></i> Masukkan Tabel Valid';
+    }
+    itemsContainer.innerHTML = `
+      <p class="text-rose-400/80 italic text-center py-3 text-xs">
+        ${parsed?.error ? escapeHtml(parsed.error) : 'Belum ada data tabel yang terdeteksi. Silakan tempel tabel markdown.'}
+      </p>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  const count = parsed.items.length;
+  const total = parsed.totalNominal;
+
+  if (badgeDetected) badgeDetected.innerText = `${count} Pos Terdeteksi`;
+  if (badgeTotal) badgeTotal.innerText = `Total: ${formatIDR(total)}`;
+  if (capitalSyncText) capitalSyncText.innerText = formatIDR(total);
+
+  if (btnApply) {
+    btnApply.disabled = false;
+    btnApply.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4"></i> Terapkan Alokasi (${count} Pos)`;
+  }
+
+  itemsContainer.innerHTML = parsed.items.map(item => {
+    const pct = total > 0 ? Math.round((item.targetAmount / total) * 100) : 0;
+    return `
+      <div class="p-2 sm:p-2.5 rounded-lg bg-[#1b1232] border border-[#2d1f50] flex items-center justify-between gap-2.5">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="w-8 h-8 rounded-lg bg-[#231840] border border-[#2d1f50] flex items-center justify-center text-base shrink-0">
+            ${item.emoji}
+          </span>
+          <div class="min-w-0">
+            <p class="font-bold text-white text-xs truncate">${escapeHtml(item.name)}</p>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <span class="w-2 h-2 rounded-full" style="background-color: ${item.color}"></span>
+              <span class="text-[10px] text-[#9f96b5]">${pct}% dari total</span>
+            </div>
+          </div>
+        </div>
+        <div class="text-right shrink-0">
+          <p class="font-extrabold text-white text-xs">${formatIDR(item.targetAmount)}</p>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function applyMarkdownAllocation() {
+  if (!currentParsedMarkdownAlloc || !currentParsedMarkdownAlloc.success || currentParsedMarkdownAlloc.items.length === 0) {
+    alert('Tidak ada pos alokasi yang valid untuk diterapkan.');
+    return;
+  }
+
+  const items = currentParsedMarkdownAlloc.items;
+  const total = currentParsedMarkdownAlloc.totalNominal;
+  const mode = document.querySelector('input[name="mdAllocMode"]:checked')?.value || 'replace';
+  const shouldUpdateCapital = document.getElementById('mdAllocUpdateCapitalCheck')?.checked;
+
+  if (mode === 'replace') {
+    state.categories = items.map((item, idx) => ({
+      id: 'cat-' + Date.now() + '-' + idx,
+      name: item.name,
+      targetAmount: item.targetAmount,
+      color: item.color || COLOR_PALETTE[idx % COLOR_PALETTE.length],
+      emoji: item.emoji || '📁'
+    }));
+  } else {
+    // Append / merge
+    items.forEach((item, idx) => {
+      const existing = state.categories.find(c => c.name.toLowerCase() === item.name.toLowerCase());
+      if (existing) {
+        existing.targetAmount = item.targetAmount;
+        if (item.emoji) existing.emoji = item.emoji;
+      } else {
+        state.categories.push({
+          id: 'cat-' + Date.now() + '-' + idx,
+          name: item.name,
+          targetAmount: item.targetAmount,
+          color: item.color || COLOR_PALETTE[(state.categories.length + idx) % COLOR_PALETTE.length],
+          emoji: item.emoji || '📁'
+        });
+      }
+    });
+  }
+
+  // Update total capital pool if requested
+  if (shouldUpdateCapital && total > 0) {
+    state.capital = total;
+    const activeProf = getActiveProfile();
+    if (activeProf) activeProf.capital = total;
+    const inputCapital = document.getElementById('inputCapital');
+    if (inputCapital) inputCapital.value = total;
+  }
+
+  saveState();
+  updateUI();
+  closeMarkdownAllocationModal();
+  showToast(`🎉 Berhasil menerapkan ${items.length} pos alokasi dari Markdown!`);
+}
+
+function extractEmojiAndName(str) {
+  if (!str) return { emoji: '', name: '' };
+  const emojiRegex = /(\p{Extended_Pictographic}|\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDE4F]|\uD83E[\uDD00-\uDDFF])/u;
+  const match = str.match(emojiRegex);
+  const emoji = match ? match[0] : '';
+  const name = str.replace(emojiRegex, '').trim().replace(/^[-:|•\s]+|[-:|•\s]+$/g, '').trim();
+  return { emoji, name };
+}
+
+function inferEmojiFromName(name) {
+  if (!name) return '📁';
+  const n = name.toLowerCase();
+  if (/kos|kontrakan|sewa|kamar|rumah|kost/.test(n)) return '🏠';
+  if (/makan|kuliner|food|harian|sarapan|lunch|dinner|jajan|snack|konsumsi/.test(n)) return '🍜';
+  if (/kuliah|kampus|buku|tugas|study|pendidikan|les|kursus|skripsi|belajar/.test(n)) return '📚';
+  if (/nongkrong|kopi|coffee|hiburan|hangout|game|gaming|nonton|cinema|wants/.test(n)) return '☕';
+  if (/tabungan|nabung|invest|dana darurat|darurat|simpan|emas|reksadana|savings/.test(n)) return '💰';
+  if (/transport|bensin|bbm|motor|mobil|ojol|gojek|grab|kereta|krl|bus/.test(n)) return '🛵';
+  if (/belanja|shopping|baju|outfit|skincare|belanjaan/.test(n)) return '🛍️';
+  if (/kesehatan|obat|dokter|rs|vitamin|medis|health/.test(n)) return '💊';
+  if (/pulsa|kuota|internet|wifi|langganan|netflix|spotify|stream/.test(n)) return '📱';
+  return '📁';
+}
+
+function parseMoneyString(val) {
+  if (!val) return 0;
+  let str = String(val).trim().toLowerCase();
+  str = str.replace(/rp\.?/g, '').replace(/\s+/g, '');
+  if (str.includes('jt') || str.includes('juta')) {
+    const num = parseFloat(str.replace(/jt|juta/g, '').replace(',', '.'));
+    return Math.round(num * 1000000);
+  }
+  if (str.includes('k') || str.includes('rb') || str.includes('ribu')) {
+    const num = parseFloat(str.replace(/k|rb|ribu/g, '').replace(',', '.'));
+    return Math.round(num * 1000);
+  }
+  str = str.replace(/[,.]00$/, '');
+  str = str.replace(/[^0-9]/g, '');
+  return parseInt(str, 10) || 0;
+}
+
+function parsePercentString(val) {
+  if (!val) return 0;
+  const str = String(val).trim().replace(/%/g, '').replace(',', '.');
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
+function splitMarkdownRow(line) {
+  let cleaned = line.trim();
+  if (cleaned.startsWith('|')) cleaned = cleaned.substring(1);
+  if (cleaned.endsWith('|')) cleaned = cleaned.substring(0, cleaned.length - 1);
+  return cleaned.split('|').map(s => s.trim());
+}
+
+function parseMarkdownAllocationTable(text, fallbackCapital = 1500000) {
+  if (!text || !text.trim()) return { success: false, items: [], totalNominal: 0, error: 'Teks tabel kosong' };
+
+  const lines = text.trim().split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return { success: false, items: [], totalNominal: 0, error: 'Teks tabel kosong' };
+
+  const tableLines = lines.filter(l => l.includes('|'));
+  const parsedItems = [];
+
+  if (tableLines.length >= 2) {
+    let headerCols = [];
+    const dataRowLines = [];
+
+    for (let i = 0; i < tableLines.length; i++) {
+      const line = tableLines[i];
+      // Skip separator row (e.g. |:---|:---|:---:|)
+      if (/^\|?(\s*:?-+:?\s*\|?)+$/.test(line)) continue;
+
+      const cells = splitMarkdownRow(line);
+      if (cells.length < 2) continue;
+
+      if (headerCols.length === 0 && (i === 0 || cells.some(c => /pos|kategori|nominal|budget|emote|persen|%/i.test(c)))) {
+        headerCols = cells.map(c => c.toLowerCase());
+      } else {
+        dataRowLines.push(cells);
+      }
+    }
+
+    let colName = -1;
+    let colAmount = -1;
+    let colPercent = -1;
+    let colEmoji = -1;
+
+    headerCols.forEach((col, idx) => {
+      const c = col.toLowerCase();
+      if (/pos|kategori|nama|name|category|department/.test(c)) colName = idx;
+      else if (/nominal|rupiah|rp|budget|anggaran|biaya|target|amount|jumlah|dana/.test(c)) colAmount = idx;
+      else if (/%|persen|percent|pct/.test(c)) colPercent = idx;
+      else if (/emote|emoji|ikon|icon|simbol/.test(c)) colEmoji = idx;
+    });
+
+    if (colName === -1) colName = 0;
+    if (colAmount === -1 && colPercent === -1) {
+      if (headerCols.length > 1) colAmount = 1;
+    }
+
+    dataRowLines.forEach((cells, rowIdx) => {
+      if (cells.length === 0) return;
+      let rawName = (colName >= 0 && colName < cells.length) ? cells[colName] : (cells[0] || '');
+      let rawAmount = (colAmount >= 0 && colAmount < cells.length) ? cells[colAmount] : '';
+      let rawPercent = (colPercent >= 0 && colPercent < cells.length) ? cells[colPercent] : '';
+      let rawEmoji = (colEmoji >= 0 && colEmoji < cells.length) ? cells[colEmoji] : '';
+
+      const extracted = extractEmojiAndName(rawName);
+      let name = extracted.name || rawName.trim();
+      let emoji = rawEmoji.trim() || extracted.emoji || inferEmojiFromName(name);
+
+      let amount = parseMoneyString(rawAmount);
+      let percent = parsePercentString(rawPercent);
+
+      if (amount <= 0 && percent > 0) {
+        amount = Math.round(fallbackCapital * (percent / 100));
+      }
+
+      if (name) {
+        parsedItems.push({
+          id: 'cat-md-' + Date.now() + '-' + rowIdx,
+          name: name,
+          targetAmount: amount,
+          percent: percent,
+          emoji: emoji || '📁',
+          color: COLOR_PALETTE[rowIdx % COLOR_PALETTE.length]
+        });
+      }
+    });
+  } else {
+    // Graceful fallback for bullet lists (e.g. - Kosan: 500rb)
+    lines.forEach((line, rowIdx) => {
+      const cleanLine = line.replace(/^[-*•\d.]+\s*/, '').trim();
+      const parts = cleanLine.split(/[:=-]\s*/);
+      if (parts.length >= 2) {
+        const rawName = parts[0].trim();
+        const rawAmount = parts[1].trim();
+        const extracted = extractEmojiAndName(rawName);
+        let amount = parseMoneyString(rawAmount);
+        let percent = parsePercentString(rawAmount);
+        if (amount <= 0 && percent > 0) amount = Math.round(fallbackCapital * (percent / 100));
+
+        parsedItems.push({
+          id: 'cat-md-' + Date.now() + '-' + rowIdx,
+          name: extracted.name,
+          targetAmount: amount,
+          percent: percent,
+          emoji: extracted.emoji || inferEmojiFromName(extracted.name) || '📁',
+          color: COLOR_PALETTE[rowIdx % COLOR_PALETTE.length]
+        });
+      }
+    });
+  }
+
+  const totalNominal = parsedItems.reduce((acc, item) => acc + (item.targetAmount || 0), 0);
+  return {
+    success: parsedItems.length > 0,
+    items: parsedItems,
+    totalNominal: totalNominal,
+    error: parsedItems.length === 0 ? 'Tidak ada data pos atau nominal yang valid ditemukan dalam tabel markdown' : null
+  };
+}
+
+// ==========================================
 // CYCLE SETTINGS
 // ==========================================
 

@@ -640,7 +640,7 @@
               <p class="text-xs text-[#9f96b5]">Ketik nominal Rupiah (Rp) jatah tiap pos — persentase (%) otomatis menyesuaikan.</p>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <span class="text-xs text-[#9f96b5]">Total Pos:</span>
               <span id="allocTotalNominalBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
                 Rp 0
@@ -648,6 +648,9 @@
               <span id="allocTotalPercentBadge" class="text-xs font-bold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 100%
               </span>
+              <button onclick="openMarkdownAllocationModal()" class="px-3 py-1.5 text-xs font-semibold bg-purple-900/40 hover:bg-purple-900/70 border border-purple-500/40 text-purple-200 rounded-lg transition flex items-center gap-1.5 shadow-sm" title="Impor Pos dari Tabel Markdown">
+                <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-purple-300"></i> Tabel Markdown
+              </button>
               <button onclick="openAddCategoryModal()" class="px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition flex items-center gap-1">
                 <i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah Pos
               </button>
@@ -844,6 +847,140 @@
       </div>
     </nav>
 
+  </div>
+
+  <!-- MODAL: MARKDOWN TABLE ALLOCATION (IMPORT / EXPORT) -->
+  <div id="modalMarkdownAlloc" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="alloc-card max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[92vh] flex flex-col">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-[#2d1f50] shrink-0">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="file-spreadsheet" class="w-5 h-5 text-purple-400"></i> Alokasi dari Tabel Markdown
+          </h3>
+          <p class="text-xs text-[#9f96b5] mt-0.5">Tempel tabel markdown dari AI atau catatan untuk mengatur pos & nominal alokasi secara instan.</p>
+        </div>
+        <button onclick="closeMarkdownAllocationModal()" class="text-[#9f96b5] hover:text-white transition p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Navigation Tabs: Impor vs Salin/Ekspor -->
+      <div class="flex rounded-xl bg-[#150d28] p-1 border border-[#2d1f50] text-xs my-3 shrink-0">
+        <button type="button" id="mdAllocTabImport" onclick="switchMarkdownAllocTab('import')"
+          class="flex-1 py-1.5 rounded-lg font-semibold transition text-center bg-purple-600 text-white shadow-sm">
+          Impor Tabel Markdown
+        </button>
+        <button type="button" id="mdAllocTabExport" onclick="switchMarkdownAllocTab('export')"
+          class="flex-1 py-1.5 rounded-lg font-semibold transition text-center text-[#9f96b5] hover:text-white">
+          Salin Alokasi Saat Ini
+        </button>
+      </div>
+
+      <!-- TAB 1: IMPOR TABEL MARKDOWN -->
+      <div id="mdAllocContentImport" class="flex-1 overflow-y-auto pr-1 space-y-4">
+        <!-- Template Shortcut Pills -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-semibold text-[#9f96b5]">Contoh Template Cepat (Klik untuk mencoba):</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" onclick="setMarkdownAllocTemplate('student')" class="text-[11px] py-1 px-2.5 bg-[#150d28] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">
+              🎓 Mahasiswa (5 Pos)
+            </button>
+            <button type="button" onclick="setMarkdownAllocTemplate('rule503020')" class="text-[11px] py-1 px-2.5 bg-[#150d28] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">
+              ⚖️ Rule 50/30/20
+            </button>
+            <button type="button" onclick="setMarkdownAllocTemplate('frugal')" class="text-[11px] py-1 px-2.5 bg-[#150d28] hover:bg-purple-950/60 text-purple-300 rounded-lg border border-[#2d1f50] transition">
+              🍜 Hemat Anak Kos (4 Pos)
+            </button>
+            <button type="button" onclick="clearMarkdownAllocInput()" class="text-[11px] py-1 px-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded-lg border border-rose-500/30 transition">
+              Hapus Teks
+            </button>
+          </div>
+        </div>
+
+        <!-- Markdown Textarea -->
+        <div>
+          <label class="block text-xs font-semibold text-[#9f96b5] mb-1">
+            Tabel Markdown:
+          </label>
+          <textarea id="mdAllocInput" rows="4" oninput="onMarkdownAllocInputChange()"
+            placeholder="| Pos Alokasi | Nominal | Emote |&#10;| Kosan & Listrik | Rp 550.000 | 🏠 |&#10;| Makan & Harian | Rp 500.000 | 🍜 |&#10;| Kebutuhan Kuliah | Rp 200.000 | 📚 |&#10;| Nongkrong & Kopi | Rp 150.000 | ☕ |&#10;| Tabungan & Darurat | Rp 200.000 | 💰 |"
+            class="w-full px-3.5 py-2.5 text-xs font-mono bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white leading-relaxed resize-y"></textarea>
+          <p class="text-[10px] text-[#6f6585] mt-1">
+            💡 Tips: Mendukung kolom nominal (Rp), persentase (%), emote, dan otomatis mendeteksi format tabel dari ChatGPT/Claude/DeepSeek.
+          </p>
+        </div>
+
+        <!-- Live Preview Box -->
+        <div id="mdAllocPreviewBox" class="p-3.5 rounded-xl bg-[#150d28] border border-[#2d1f50] space-y-2.5">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <span class="text-xs font-bold text-white flex items-center gap-1.5">
+              <i data-lucide="eye" class="w-3.5 h-3.5 text-purple-400"></i> Hasil Pembacaan Tabel
+            </span>
+            <div class="flex items-center gap-2">
+              <span id="mdAllocDetectedBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                0 Pos
+              </span>
+              <span id="mdAllocTotalBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                Total: Rp 0
+              </span>
+            </div>
+          </div>
+
+          <!-- Preview Items Container -->
+          <div id="mdAllocPreviewItems" class="max-h-44 overflow-y-auto space-y-1.5 text-xs">
+            <p class="text-[#6f6585] italic text-center py-3">Masukkan atau tempel tabel markdown di atas untuk melihat pratinjau alokasi.</p>
+          </div>
+        </div>
+
+        <!-- Options: Replace vs Merge & Update Capital -->
+        <div class="space-y-2 pt-1 border-t border-[#2d1f50]/60">
+          <label class="flex items-center gap-2 cursor-pointer text-xs text-[#b8afce]">
+            <input type="checkbox" id="mdAllocUpdateCapitalCheck" checked
+              class="w-4 h-4 rounded border-[#2d1f50] text-purple-600 focus:ring-purple-500 bg-[#150d28]">
+            <span>Sesuaikan <strong>Total Capital Pool</strong> profil dengan total tabel (<span id="mdAllocCapitalSyncText" class="text-purple-300 font-semibold">Rp 0</span>)</span>
+          </label>
+
+          <div class="flex items-center gap-4 text-xs text-[#9f96b5]">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="mdAllocMode" value="replace" checked class="text-purple-600 focus:ring-purple-500 bg-[#150d28]">
+              <span>Ganti semua pos yang ada (Rekomendasi)</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="mdAllocMode" value="append" class="text-purple-600 focus:ring-purple-500 bg-[#150d28]">
+              <span>Tambahkan ke pos yang ada</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: SALIN / EKSPOR MARKDOWN -->
+      <div id="mdAllocContentExport" class="flex-1 overflow-y-auto pr-1 space-y-3.5 hidden">
+        <p class="text-xs text-[#9f96b5]">
+          Berikut adalah tabel markdown dari alokasi pos yang sedang aktif. Kamu bisa menyalinnya ke catatan, Notion, atau chat AI:
+        </p>
+
+        <textarea id="mdAllocExportText" readonly rows="8"
+          class="w-full px-3.5 py-2.5 text-xs font-mono bg-[#150d28] border border-[#2d1f50] rounded-xl text-purple-200 select-all focus:outline-none"></textarea>
+
+        <button type="button" onclick="copyCategoriesMarkdown()"
+          class="w-full py-2.5 px-4 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2">
+          <i data-lucide="copy" class="w-4 h-4"></i> Salin Tabel Markdown ke Clipboard
+        </button>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="pt-3 border-t border-[#2d1f50] flex items-center justify-between gap-2 shrink-0 mt-2">
+        <button type="button" onclick="closeMarkdownAllocationModal()"
+          class="px-4 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition">
+          Batal
+        </button>
+        <button type="button" id="btnApplyMarkdownAlloc" onclick="applyMarkdownAllocation()" disabled
+          class="px-5 py-2.5 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i data-lucide="check-circle" class="w-4 h-4"></i> Terapkan Alokasi Pos
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL: ADD / EDIT CATEGORY (Adjustable Emoticon & Multi-Color) -->
@@ -1493,6 +1630,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=3.1"></script>
+  <script src="app.js?v=3.2"></script>
 </body>
 </html>
