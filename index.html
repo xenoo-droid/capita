@@ -152,6 +152,9 @@
         <span id="mobileCycleBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
           Bulanan
         </span>
+        <button type="button" onclick="openCloudSyncModal()" id="mobileRoleBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> 📱 Master
+        </button>
         <button onclick="openCloudSyncModal()" id="mobileCloudBtn" title="Sinkronisasi Cloud Multi-Device" class="w-8 h-8 rounded-full bg-[#1b1232] border border-[#2d1f50] text-purple-300 hover:text-white flex items-center justify-center transition">
           <i data-lucide="cloud" class="w-3.5 h-3.5"></i>
         </button>
@@ -176,6 +179,15 @@
       </div>
 
       <div class="flex items-center gap-2.5">
+        <!-- Device Dominance Role & Quick Pull HP in Desktop Header -->
+        <div id="desktopDeviceRoleContainer" class="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#150d28] border border-[#2d1f50] text-xs">
+          <span id="desktopRoleDot" class="w-2 h-2 rounded-full bg-cyan-400"></span>
+          <span id="desktopRoleText" class="font-medium text-[#c4b9db]">💻 Laptop Sekunder</span>
+          <button type="button" onclick="pullLatestHpMasterData()" title="Tarik data transaksi terbaru dari HP Master" class="ml-1 text-[11px] font-bold text-purple-400 hover:text-purple-300 underline transition flex items-center gap-1">
+            <i data-lucide="download" class="w-3 h-3"></i> Tarik HP
+          </button>
+        </div>
+
         <!-- Cloud Sync Button in Desktop Header -->
         <button onclick="openCloudSyncModal()" id="desktopCloudBtn" title="Sinkronisasi Multi-Device Cloud" class="px-3 py-1.5 rounded-xl bg-[#1b1232] border border-[#2d1f50] hover:border-purple-500/50 hover:bg-[#231840] transition flex items-center gap-1.5 text-xs font-medium text-purple-200 shadow-sm">
           <i data-lucide="cloud" class="w-3.5 h-3.5 text-purple-400"></i>
@@ -1136,6 +1148,26 @@
         </button>
       </div>
 
+      <!-- Device Authority & Role Card (HP Master Dominance) -->
+      <div class="p-3.5 rounded-2xl bg-[#150d28] border border-purple-500/30 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <div id="modalDeviceRoleTitle" class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+            <i data-lucide="smartphone" class="w-4 h-4 text-emerald-400"></i> Perangkat Ini: HP Master (Otoritas Utama)
+          </div>
+          <button type="button" id="modalDeviceRoleToggleBtn" onclick="setDeviceRole(isDeviceMaster() ? 'laptop_secondary' : 'hp_master')" class="text-[11px] text-purple-300 hover:text-white underline font-semibold transition">
+            Ganti Peran
+          </button>
+        </div>
+        <p id="modalDeviceRoleDesc" class="text-[11px] text-[#cfc7e0] leading-relaxed">
+          HP memegang kontrol dominan atas database. Setiap transaksi atau perubahan di HP akan langsung menimpa data laptop dan menjadi acuan utama.
+        </p>
+        <div class="pt-1">
+          <button type="button" id="modalDeviceRoleActionBtn" onclick="forcePushMobileMasterToCloud()" class="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30">
+            <i data-lucide="zap" class="w-3.5 h-3.5"></i> Kirim Otoritas Data HP ke Cloud
+          </button>
+        </div>
+      </div>
+
       <!-- Sub Tabs: Status Profil Cloud vs Hubungkan Akun / Password -->
       <div class="flex rounded-xl bg-[#150d28] p-1 border border-[#2d1f50] text-xs">
         <button type="button" id="cloudTabShare" onclick="switchCloudSyncTab('share')"
@@ -1723,6 +1755,11 @@
     </div>
   </div>
 
-  <script src="app.js?v=4.0"></script>
+  <!-- MOBILE FLOATING ACTION BUTTON (FAB) FOR INSTANT EXPENSE LOGGING ON HP -->
+  <button onclick="openMobileQuickAddExpense()" id="mobileFabAddExpense" class="md:hidden fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-2xl shadow-purple-600/50 flex items-center justify-center active:scale-90 transition-transform border border-purple-400/40" title="Catat Pengeluaran Cepat dari HP">
+    <i data-lucide="plus" class="w-7 h-7 stroke-[2.5]"></i>
+  </button>
+
+  <script src="app.js?v=4.1"></script>
 </body>
 </html>

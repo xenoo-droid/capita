@@ -139,6 +139,8 @@ function syncProfileToState(targetState, profile) {
   targetState.cycleOffset = profile.cycleOffset || 0;
   targetState.cloudSyncKey = profile.cloudSyncKey || generateSyncKey(profile.name);
   targetState.updatedAt = profile.updatedAt || Date.now();
+  targetState.masterUpdatedAt = profile.masterUpdatedAt || 0;
+  targetState.lastEditedRole = profile.lastEditedRole || null;
 }
 
 function syncStateToActiveProfile() {
@@ -153,6 +155,8 @@ function syncStateToActiveProfile() {
   active.cycleOffset = state.cycleOffset;
   active.cloudSyncKey = state.cloudSyncKey || active.cloudSyncKey || generateSyncKey(active.name);
   active.updatedAt = state.updatedAt || active.updatedAt || Date.now();
+  active.masterUpdatedAt = state.masterUpdatedAt || active.masterUpdatedAt || 0;
+  active.lastEditedRole = state.lastEditedRole || active.lastEditedRole || null;
 }
 
 function normalizeProfile(prof, idx = 0) {
@@ -581,6 +585,9 @@ function updateUI() {
 
   // Multi-Profile elements & cards
   renderProfileElements();
+
+  // Update device dominance role UI
+  updateDeviceRoleUI();
 
   // Refresh Lucide Icons
   if (window.lucide) {
@@ -2329,7 +2336,94 @@ function updateCloudStatusUI(status = 'connected') {
   }
 }
 
-function syncActiveProfileToCloud(isImmediate = false) {
+function getDeviceRole() {
+  const saved = localStorage.getItem('capita_device_role');
+  if (saved === 'hp_master' || saved === 'laptop_secondary') return saved;
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+  return isMobile ? 'hp_master' : 'laptop_secondary';
+}
+
+function isDeviceMaster() {
+  return getDeviceRole() === 'hp_master';
+}
+
+function setDeviceRole(role) {
+  localStorage.setItem('capita_device_role', role);
+  updateDeviceRoleUI();
+  if (role === 'hp_master') {
+    showToast('📱 Mode: HP Master aktif (Otoritas Utama)!');
+    syncActiveProfileToCloud(true, true);
+  } else {
+    showToast('💻 Mode: Laptop Sekunder aktif (Mengikuti HP)!');
+    pullLatestHpMasterData();
+  }
+}
+
+function updateDeviceRoleUI() {
+  const role = getDeviceRole();
+  const isMaster = role === 'hp_master';
+
+  // Desktop Header elements
+  const desktopRoleText = document.getElementById('desktopRoleText');
+  const desktopRoleDot = document.getElementById('desktopRoleDot');
+  if (desktopRoleText) {
+    desktopRoleText.innerText = isMaster ? '📱 HP Master (Dominan)' : '💻 Laptop Sekunder';
+  }
+  if (desktopRoleDot) {
+    desktopRoleDot.className = isMaster ? 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse' : 'w-2 h-2 rounded-full bg-cyan-400';
+  }
+
+  // Mobile Header badge
+  const mobileRoleBadge = document.getElementById('mobileRoleBadge');
+  if (mobileRoleBadge) {
+    if (isMaster) {
+      mobileRoleBadge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm';
+      mobileRoleBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> 📱 Master';
+    } else {
+      mobileRoleBadge.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1';
+      mobileRoleBadge.innerHTML = '💻 Sekunder';
+    }
+  }
+
+  // Modal elements
+  const modalRoleTitle = document.getElementById('modalDeviceRoleTitle');
+  const modalRoleDesc = document.getElementById('modalDeviceRoleDesc');
+  const modalRoleActionBtn = document.getElementById('modalDeviceRoleActionBtn');
+  const modalRoleToggleBtn = document.getElementById('modalDeviceRoleToggleBtn');
+
+  if (modalRoleTitle) {
+    modalRoleTitle.innerHTML = isMaster
+      ? '<span class="text-emerald-400 flex items-center gap-1.5 font-bold"><i data-lucide="smartphone" class="w-4 h-4 text-emerald-400"></i> Perangkat Ini: HP Master (Otoritas Utama)</span>'
+      : '<span class="text-cyan-400 flex items-center gap-1.5 font-bold"><i data-lucide="laptop" class="w-4 h-4 text-cyan-400"></i> Perangkat Ini: Laptop Sekunder (Mengikuti HP)</span>';
+  }
+
+  if (modalRoleDesc) {
+    modalRoleDesc.innerText = isMaster
+      ? 'HP memegang kontrol dominan atas database. Setiap transaksi atau perubahan di HP akan langsung menimpa data laptop dan menjadi acuan utama.'
+      : 'Laptop berstatus sekunder. Jika ada transaksi atau perubahan di HP, laptop akan selalu mengalah dan memperbarui tampilannya mengikuti data HP.';
+  }
+
+  if (modalRoleActionBtn) {
+    if (isMaster) {
+      modalRoleActionBtn.innerHTML = '<i data-lucide="zap" class="w-3.5 h-3.5"></i> Kirim Otoritas Data HP ke Cloud';
+      modalRoleActionBtn.className = 'w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30';
+      modalRoleActionBtn.onclick = () => forcePushMobileMasterToCloud();
+    } else {
+      modalRoleActionBtn.innerHTML = '<i data-lucide="download" class="w-3.5 h-3.5"></i> Tarik Data HP Master Sekarang';
+      modalRoleActionBtn.className = 'w-full py-2 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md shadow-cyan-600/30';
+      modalRoleActionBtn.onclick = () => pullLatestHpMasterData();
+    }
+  }
+
+  if (modalRoleToggleBtn) {
+    modalRoleToggleBtn.innerText = isMaster ? 'Ubah ke Laptop Sekunder' : 'Jadikan HP Master';
+    modalRoleToggleBtn.onclick = () => setDeviceRole(isMaster ? 'laptop_secondary' : 'hp_master');
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function syncActiveProfileToCloud(isImmediate = false, forceMaster = false) {
   if (!isFirebaseReady || !firebaseDb) return;
   if (isRemoteSyncInProgress) return;
   if (state._isFreshDevice) return; // Prevent unauthenticated fresh device from overwriting
@@ -2340,10 +2434,19 @@ function syncActiveProfileToCloud(isImmediate = false) {
     active.cloudSyncKey = generateSyncKey(active.name);
   }
 
-  active.updatedAt = Date.now();
+  const isMaster = forceMaster || isDeviceMaster();
+  const now = Date.now();
+
+  if (isMaster) {
+    active.masterUpdatedAt = now;
+    active.lastEditedRole = 'hp_master';
+  } else {
+    active.lastEditedRole = 'laptop_secondary';
+  }
+  active.updatedAt = now;
   const cloudKey = getProfileCloudKey(active.name);
 
-  const doPush = () => {
+  const executePush = () => {
     try {
       updateCloudStatusUI('syncing');
 
@@ -2362,6 +2465,8 @@ function syncActiveProfileToCloud(isImmediate = false) {
         incomes: active.incomes,
         analysisTab: active.analysisTab || 'expense',
         cycleOffset: active.cycleOffset || 0,
+        masterUpdatedAt: active.masterUpdatedAt || 0,
+        lastEditedRole: active.lastEditedRole || (isMaster ? 'hp_master' : 'laptop_secondary'),
         updatedAt: active.updatedAt
       };
 
@@ -2369,7 +2474,11 @@ function syncActiveProfileToCloud(isImmediate = false) {
         key: cloudKey,
         name: active.name,
         updatedAt: active.updatedAt,
+        masterUpdatedAt: active.masterUpdatedAt || 0,
+        deviceRole: isMaster ? 'hp_master' : 'laptop_secondary',
+        isMaster: isMaster,
         lastEditedBy: CLIENT_ID,
+        lastEditedRole: isMaster ? 'hp_master' : 'laptop_secondary',
         passwordHash: active.passwordHash || null,
         profile: profileData
       };
@@ -2381,6 +2490,8 @@ function syncActiveProfileToCloud(isImmediate = false) {
         avatar: active.avatar || '👤',
         color: active.color || '#9d50ff',
         hasPassword: !!active.passwordHash,
+        masterUpdatedAt: active.masterUpdatedAt || 0,
+        lastEditedRole: isMaster ? 'hp_master' : 'laptop_secondary',
         updatedAt: active.updatedAt
       };
 
@@ -2404,6 +2515,24 @@ function syncActiveProfileToCloud(isImmediate = false) {
     } catch (e) {
       console.warn('Sync to cloud error:', e);
       updateCloudStatusUI('offline');
+    }
+  };
+
+  const doPush = () => {
+    // GUARD: Jika perangkat ini adalah Laptop Sekunder, cek apakah Cloud memiliki data HP Master yang lebih baru
+    if (!isMaster) {
+      firebaseDb.ref('capita_profiles/' + cloudKey).once('value', (snap) => {
+        const val = snap.val();
+        if (val && val.profile && val.masterUpdatedAt && val.masterUpdatedAt > (active.masterUpdatedAt || 0)) {
+          // Data di HP Master lebih baru! Laptop mengalah ("kalah")!
+          console.warn('[Sync] Laptop yields to newer HP Master state in Cloud');
+          applyIncomingCloudData(val.profile, val.updatedAt || Date.now(), val.masterUpdatedAt, '📱 Data di HP Master lebih baru! Laptop otomatis disesuaikan.');
+          return;
+        }
+        executePush();
+      });
+    } else {
+      executePush();
     }
   };
 
@@ -2436,44 +2565,119 @@ function attachCloudListenerForActiveProfile() {
     // Abaikan jika update ini berasal dari perangkat ini sendiri
     if (val.lastEditedBy === CLIENT_ID) return;
 
+    const isRemoteMaster = val.isMaster === true || val.deviceRole === 'hp_master';
+    const remoteMasterTime = val.masterUpdatedAt || 0;
+    const localMasterTime = active.masterUpdatedAt || 0;
     const cloudUpdatedAt = val.updatedAt || 0;
     const localUpdatedAt = active.updatedAt || 0;
 
-    // Jika data dari cloud lebih baru atau sama (berasal dari perangkat lain)
-    if (cloudUpdatedAt >= localUpdatedAt) {
-      isRemoteSyncInProgress = true;
-      try {
-        const cloudProf = val.profile;
-        active.name = cloudProf.name || active.name;
-        active.role = cloudProf.role || active.role;
-        active.avatar = cloudProf.avatar || active.avatar;
-        active.color = cloudProf.color || active.color;
-        active.capital = cloudProf.capital !== undefined ? cloudProf.capital : active.capital;
-        active.passwordHash = cloudProf.passwordHash !== undefined ? cloudProf.passwordHash : active.passwordHash;
-        active.cycle = cloudProf.cycle || active.cycle;
-        active.categories = cloudProf.categories || active.categories;
-        active.expenses = cloudProf.expenses || active.expenses;
-        active.incomes = cloudProf.incomes || active.incomes;
-        active.updatedAt = cloudUpdatedAt;
+    // RULE 1: Perangkat remote adalah HP Master -> Laptop WAJIB KALAH & MENGIKUTI
+    if (isRemoteMaster) {
+      applyIncomingCloudData(val.profile, cloudUpdatedAt, remoteMasterTime, '📱 Data otomatis tersinkron dari HP Master!');
+      return;
+    }
 
-        syncProfileToState(state, active);
-        const totalBase = (state.categories || []).reduce((s, c) => s + (Number(c.targetAmount) || 0), 0);
-        state.capital = totalBase;
-        active.capital = totalBase;
-
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        } catch (e) {}
-
-        updateUI();
-        showToast('☁️ Data profil tersinkron dari perangkat lain!');
-      } finally {
-        isRemoteSyncInProgress = false;
+    // RULE 2: Perangkat ini adalah HP Master -> HP Master memegang otoritas penuh
+    if (isDeviceMaster()) {
+      if (cloudUpdatedAt > localUpdatedAt && localMasterTime <= remoteMasterTime) {
+        applyIncomingCloudData(val.profile, cloudUpdatedAt, remoteMasterTime, '💻 Data diperbarui dari Laptop.');
+      } else {
+        console.log('[Sync] HP Master mengabaikan update laptop karena HP memegang otoritas penuh.');
+        syncActiveProfileToCloud(true, true);
       }
+      return;
+    }
+
+    // RULE 3: Default timestamp comparison
+    if (cloudUpdatedAt >= localUpdatedAt) {
+      applyIncomingCloudData(val.profile, cloudUpdatedAt, remoteMasterTime, '☁️ Data profil tersinkron dari perangkat lain!');
     }
   }, (err) => {
     console.warn('Firebase Realtime listener error:', err);
   });
+}
+
+function applyIncomingCloudData(cloudProf, cloudUpdatedAt, masterTime, toastMsg) {
+  isRemoteSyncInProgress = true;
+  try {
+    const active = getActiveProfile();
+    active.name = cloudProf.name || active.name;
+    active.role = cloudProf.role || active.role;
+    active.avatar = cloudProf.avatar || active.avatar;
+    active.color = cloudProf.color || active.color;
+    active.capital = cloudProf.capital !== undefined ? cloudProf.capital : active.capital;
+    active.passwordHash = cloudProf.passwordHash !== undefined ? cloudProf.passwordHash : active.passwordHash;
+    active.cycle = cloudProf.cycle || active.cycle;
+    active.categories = cloudProf.categories || active.categories;
+    active.expenses = cloudProf.expenses || active.expenses;
+    active.incomes = cloudProf.incomes || active.incomes;
+    active.analysisTab = cloudProf.analysisTab || active.analysisTab;
+    active.cycleOffset = cloudProf.cycleOffset !== undefined ? cloudProf.cycleOffset : active.cycleOffset;
+    active.updatedAt = cloudUpdatedAt;
+    active.masterUpdatedAt = masterTime || cloudProf.masterUpdatedAt || active.masterUpdatedAt || 0;
+    active.lastEditedRole = cloudProf.lastEditedRole || active.lastEditedRole;
+
+    syncProfileToState(state, active);
+    const totalBase = (state.categories || []).reduce((s, c) => s + (Number(c.targetAmount) || 0), 0);
+    state.capital = totalBase;
+    active.capital = totalBase;
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {}
+
+    updateUI();
+    updateDeviceRoleUI();
+    if (toastMsg) showToast(toastMsg);
+  } finally {
+    isRemoteSyncInProgress = false;
+  }
+}
+
+async function pullLatestHpMasterData() {
+  if (!isFirebaseReady || !firebaseDb) {
+    showToast('⚠️ Firebase belum terhubung');
+    return;
+  }
+  const active = getActiveProfile();
+  if (!active) return;
+  const cloudKey = getProfileCloudKey(active.name);
+
+  try {
+    showToast('⏳ Menarik data terbaru dari HP Master...');
+    const snap = await firebaseDb.ref('capita_profiles/' + cloudKey).once('value');
+    const val = snap.val();
+    if (!val || !val.profile) {
+      showToast('⚠️ Data di cloud belum tersedia.');
+      return;
+    }
+
+    applyIncomingCloudData(val.profile, val.updatedAt || Date.now(), val.masterUpdatedAt || 0, '📱 Berhasil menarik data terbaru dari HP Master!');
+  } catch (e) {
+    console.error('Error pulling HP Master data:', e);
+    showToast('❌ Gagal menarik data dari Cloud.');
+  }
+}
+
+function forcePushMobileMasterToCloud() {
+  if (!isFirebaseReady || !firebaseDb) {
+    showToast('⚠️ Firebase belum terhubung');
+    return;
+  }
+  setDeviceRole('hp_master');
+  syncActiveProfileToCloud(true, true);
+  showToast('⚡ Otoritas HP Master dikirim ke Cloud & Laptop!');
+}
+
+function openMobileQuickAddExpense() {
+  switchTab('expenses');
+  setTimeout(() => {
+    const amtInput = document.getElementById('expAmount');
+    if (amtInput) {
+      amtInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      amtInput.focus();
+    }
+  }, 120);
 }
 
 async function checkCloudProfileForFreshDevice() {
@@ -2593,6 +2797,7 @@ function openCloudSyncModal(initialTab = 'share') {
 
   populateCloudConnectDropdown();
   switchCloudSyncTab(initialTab);
+  updateDeviceRoleUI();
   modal.classList.remove('hidden');
   if (window.lucide) lucide.createIcons();
 }
@@ -2664,8 +2869,12 @@ function onSelectCloudProfileChange(val) {
 }
 
 function manualTriggerCloudSync() {
-  syncActiveProfileToCloud(true);
-  showToast('☁️ Sinkronisasi ke Cloud berhasil dijalankan!');
+  if (isDeviceMaster()) {
+    syncActiveProfileToCloud(true, true);
+    showToast('📱 Otoritas HP Master berhasil dikirim ke Cloud!');
+  } else {
+    pullLatestHpMasterData();
+  }
 }
 
 async function connectCloudProfileWithNameAndPassword(nameOrKey, inputPin) {
@@ -3987,5 +4196,6 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   updateUI();
+  updateDeviceRoleUI();
   checkLockScreenState();
 });
