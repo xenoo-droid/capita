@@ -1124,7 +1124,7 @@
             <i data-lucide="smartphone" class="w-5 h-5"></i>
           </div>
           <div class="min-w-0">
-            <p class="text-xs font-bold text-white truncate">Akses di HP, Laptop & Tablet</p>
+            <p class="text-xs font-bold text-white truncate">Realtime Sync di HP & Laptop</p>
             <p id="cloudSyncStatusBadge" class="text-[11px] text-emerald-400 flex items-center gap-1">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               Realtime Database Terhubung
@@ -1136,73 +1136,89 @@
         </button>
       </div>
 
-      <!-- Sub Tabs: Bagikan Profil Ini vs Hubungkan dari Perangkat Lain -->
+      <!-- Sub Tabs: Status Profil Cloud vs Hubungkan Akun / Password -->
       <div class="flex rounded-xl bg-[#150d28] p-1 border border-[#2d1f50] text-xs">
         <button type="button" id="cloudTabShare" onclick="switchCloudSyncTab('share')"
           class="flex-1 py-1.5 rounded-lg font-semibold transition text-center bg-purple-600 text-white shadow-sm">
-          Bagikan Profil Ini
+          Status Profil Ini
         </button>
         <button type="button" id="cloudTabConnect" onclick="switchCloudSyncTab('connect')"
           class="flex-1 py-1.5 rounded-lg font-semibold transition text-center text-[#9f96b5] hover:text-white">
-          Hubungkan Perangkat Lain
+          Hubungkan dengan Password
         </button>
       </div>
 
-      <!-- Tab Content 1: Bagikan Profil Ini (Share to other devices) -->
+      <!-- Tab Content 1: Status Profil Ini (Share to other devices) -->
       <div id="cloudContentShare" class="space-y-3.5">
-        <div class="p-4 rounded-xl bg-[#150d28] border border-[#2d1f50] text-center space-y-2">
-          <p class="text-xs text-[#9f96b5]">Kode Sinkronisasi Profil Aktif (<span id="cloudShareProfName" class="text-white font-semibold">Haryo Seno</span>):</p>
-          <div class="flex items-center justify-center gap-2">
-            <span id="cloudSyncCodeDisplay" class="font-mono text-xl sm:text-2xl font-black text-purple-300 tracking-wider bg-[#1b1232] px-4 py-2 rounded-xl border border-purple-500/40 select-all">
-              SENO-7721
-            </span>
-            <button type="button" onclick="copyCloudSyncCode()" class="p-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white transition shadow-md shadow-purple-600/30" title="Salin Kode">
-              <i data-lucide="copy" class="w-4 h-4"></i>
-            </button>
+        <div class="flex items-center gap-3 p-3 rounded-xl bg-[#150d28] border border-[#2d1f50]">
+          <div id="cloudActiveAvatar" class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white bg-purple-600/30 border border-purple-500/40 shrink-0">
+            HS
           </div>
-          <p class="text-[11px] text-[#6f6585]">
-            💡 Buka Capita di HP kamu ➔ Pilih <strong>"Hubungkan Cloud"</strong> ➔ Masukkan kode di atas (+ PIN jika profil ber-PIN).
-          </p>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs text-[#9f96b5]">Profil Aktif di Cloud:</p>
+            <p id="cloudShareProfName" class="text-sm font-bold text-white truncate">Haryo Seno</p>
+          </div>
+          <button onclick="manualTriggerCloudSync()" class="px-2.5 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs font-semibold flex items-center gap-1.5 transition" title="Sinkronkan Sekarang">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sinkron
+          </button>
         </div>
 
-        <div class="p-3 rounded-xl bg-purple-950/20 border border-purple-800/30 text-xs text-[#b8afce] space-y-1">
+        <!-- Dynamic Password Protection Status Card -->
+        <div id="cloudPassStatusContainer" class="p-3.5 rounded-xl border text-xs space-y-2">
+          <!-- Populated dynamically via JS -->
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-purple-950/20 border border-purple-800/30 text-xs text-[#b8afce] space-y-2">
           <p class="font-bold text-white flex items-center gap-1.5">
-            <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i> Sinkronisasi 2 Arah Otomatis
+            <i data-lucide="smartphone" class="w-4 h-4 text-purple-400"></i> Cara Buka di HP / Perangkat Lain:
           </p>
-          <p class="text-[11px] leading-relaxed">
-            Setiap kali kamu mencatat transaksi atau mengubah anggaran di salah satu perangkat, perangkat lain akan ter-update otomatis secara langsung!
+          <ol class="list-decimal list-inside space-y-1.5 text-[11px] text-[#cfc7e0]">
+            <li>Buka <strong>xenoo-droid.github.io/capita</strong> di browser HP kamu.</li>
+            <li>Pilih profil <strong class="text-purple-300" id="cloudShareProfNameGuide">Haryo Seno</strong>.</li>
+            <li>Masukkan <strong>Password/PIN</strong> profil ini.</li>
+          </ol>
+          <p class="text-[10px] text-emerald-400 flex items-center gap-1 pt-1.5 border-t border-purple-900/40">
+            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Langsung tersambung 2 arah secara Real-Time tanpa perlu ubah API key!
           </p>
         </div>
       </div>
 
-      <!-- Tab Content 2: Hubungkan Perangkat Lain (Connect to another device) -->
+      <!-- Tab Content 2: Hubungkan Perangkat Lain (Connect with Name & Password) -->
       <div id="cloudContentConnect" class="space-y-3 hidden">
+        <p class="text-xs text-[#9f96b5]">
+          Buka profil kamu yang tersimpan di Cloud ke perangkat ini. Cukup pilih profil dan masukkan Password.
+        </p>
+
         <form onsubmit="event.preventDefault(); submitConnectCloudProfile();" class="space-y-3">
           <div>
-            <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Kode Sinkronisasi (Sync Code):</label>
-            <input type="text" id="cloudInputSyncCode" placeholder="Contoh: SENO-7721"
-              class="w-full px-4 py-2.5 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white font-mono font-bold tracking-wider uppercase">
+            <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Pilih Profil dari Cloud:</label>
+            <select id="cloudSelectProfile" onchange="onSelectCloudProfileChange(this.value)"
+              class="w-full px-3.5 py-2 text-xs bg-[#150d28] border border-[#2d1f50] rounded-xl text-white focus:ring-2 focus:ring-purple-500 focus:outline-none mb-1.5">
+              <option value="">-- Pilih Profil dari Cloud (Terdeteksi) --</option>
+            </select>
+            <input type="text" id="cloudInputProfName" placeholder="Atau ketik nama profil (misal: Haryo Seno)"
+              class="w-full px-3.5 py-2 text-xs bg-[#150d28] border border-[#2d1f50] rounded-xl text-white focus:ring-2 focus:ring-purple-500 focus:outline-none">
           </div>
 
           <div>
-            <label class="block text-xs font-semibold text-[#9f96b5] mb-1">PIN Profil (Jika profil ber-password):</label>
+            <label class="block text-xs font-semibold text-[#9f96b5] mb-1">Password / PIN Profil:</label>
             <div class="relative">
-              <input type="password" id="cloudInputPin" placeholder="Masukkan PIN profil (jika ada)"
-                class="w-full px-4 py-2 text-sm bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider font-bold">
-              <button type="button" onclick="togglePasswordVisibility('cloudInputPin', this)" class="absolute right-3 top-2.5 text-[#9f96b5] hover:text-white transition">
+              <input type="password" id="cloudInputPin" placeholder="Masukkan Password / PIN profil"
+                class="w-full px-3.5 py-2 text-xs bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white tracking-wider font-bold pr-10">
+              <button type="button" onclick="togglePasswordVisibility('cloudInputPin', this)" class="absolute right-3 top-2 text-[#9f96b5] hover:text-white transition">
                 <i data-lucide="eye" class="w-4 h-4"></i>
               </button>
             </div>
-            <p class="text-[10px] text-[#6f6585] mt-1">Kosongkan jika profil tersebut tidak dipasangi PIN/password.</p>
+            <p class="text-[10px] text-[#6f6585] mt-1">Kosongkan jika profil tersebut tidak dipasangi Password/PIN.</p>
           </div>
 
           <p id="cloudConnectError" class="text-xs text-rose-400 font-medium hidden flex items-center gap-1">
             <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
-            <span id="cloudConnectErrorText">Kode sinkronisasi tidak ditemukan!</span>
+            <span id="cloudConnectErrorText">Profil tidak ditemukan!</span>
           </p>
 
           <button type="submit" id="cloudConnectBtn" class="w-full py-2.5 px-4 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2">
-            <i data-lucide="cloud-download" class="w-4 h-4"></i> Hubungkan & Tarik Data Cloud
+            <i data-lucide="cloud-download" class="w-4 h-4"></i> Hubungkan & Sinkronkan
           </button>
         </form>
       </div>
@@ -1214,6 +1230,49 @@
     </div>
   </div>
 
+  <!-- MODAL: QUICK PROMPT FOR CLOUD PROFILE PASSWORD -->
+  <div id="modalQuickCloudPrompt" class="fixed inset-0 z-[80] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 hidden" style="z-index: 80;">
+    <div class="alloc-card max-w-sm w-full p-5 shadow-2xl border border-purple-500/40 bg-[#1b1232] space-y-4">
+      <div class="text-center space-y-2">
+        <div id="quickCloudAvatar" class="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-xl font-bold border shadow-lg bg-purple-600/30 text-purple-300 border-purple-500/40">
+          HS
+        </div>
+        <div>
+          <h3 id="quickCloudTargetName" class="text-base font-bold text-white">Haryo Seno</h3>
+          <p id="quickCloudTargetRole" class="text-xs text-[#9f96b5]">Profil di Firebase Cloud Realtime</p>
+        </div>
+        <p class="text-xs text-[#b8afce] px-2 leading-relaxed">
+          Masukkan Password/PIN untuk menghubungkan profil ini ke perangkat ini secara real-time.
+        </p>
+      </div>
+
+      <form onsubmit="event.preventDefault(); submitQuickCloudPrompt();" class="space-y-3">
+        <div>
+          <div class="relative">
+            <input type="password" id="quickCloudPasswordInput" placeholder="Masukkan PIN / Password"
+              class="w-full px-4 py-2.5 text-center text-base tracking-widest font-bold bg-[#150d28] border border-[#2d1f50] rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-white pr-10">
+            <button type="button" onclick="togglePasswordVisibility('quickCloudPasswordInput', this)" class="absolute right-3 top-3 text-[#9f96b5] hover:text-white transition">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <p id="quickCloudError" class="text-xs text-rose-400 font-medium text-center mt-1.5 hidden flex items-center justify-center gap-1">
+            <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+            <span id="quickCloudErrorText">Password salah!</span>
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <button type="button" onclick="closeQuickCloudPrompt()" class="flex-1 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white bg-white/5 hover:bg-white/10 transition">
+            Batal
+          </button>
+          <button type="submit" id="quickCloudSubmitBtn" class="flex-1 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30 transition flex items-center justify-center gap-1.5">
+            <i data-lucide="cloud-download" class="w-3.5 h-3.5"></i> Hubungkan
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: SWITCH PROFILE (QUICK SWITCHER) -->
   <div id="modalProfileSwitch" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden" style="z-index: 60;">
     <div class="alloc-card max-w-md w-full p-5 sm:p-6 shadow-2xl border border-[#2d1f50] bg-[#1b1232] max-h-[90vh] flex flex-col">
@@ -1222,16 +1281,24 @@
           <h3 class="text-base font-bold text-white flex items-center gap-2">
             <i data-lucide="users" class="w-4 h-4 text-purple-400"></i> Pilih Profil Pengguna
           </h3>
-          <p class="text-xs text-[#9f96b5] mt-0.5">Beralih akun atau kelola profil keuangan terpisah.</p>
+          <p class="text-xs text-[#9f96b5] mt-0.5">Beralih akun atau hubungkan profil dari Cloud.</p>
         </div>
         <button onclick="closeProfileSwitchModal()" class="text-[#9f96b5] hover:text-white transition p-1">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
-      <!-- List of Profiles (Scrollable) -->
-      <div id="modalProfileSwitchList" class="space-y-2.5 overflow-y-auto pr-1 my-3 flex-1 max-h-[50vh]">
+      <!-- List of Local Profiles (Scrollable) -->
+      <div id="modalProfileSwitchList" class="space-y-2.5 overflow-y-auto pr-1 my-2 flex-1 max-h-[40vh]">
         <!-- Populated by JS -->
+      </div>
+
+      <!-- Cloud Profiles Section -->
+      <div id="modalCloudProfilesSection" class="pt-2.5 border-t border-[#2d1f50] hidden">
+        <p class="text-xs font-bold text-purple-300 flex items-center gap-1.5 mb-2">
+          <i data-lucide="cloud" class="w-3.5 h-3.5 text-purple-400"></i> Profil Tersedia di Cloud (Realtime):
+        </p>
+        <div id="modalCloudProfilesList" class="space-y-2 overflow-y-auto max-h-[22vh]"></div>
       </div>
 
       <!-- Footer Buttons -->
@@ -1241,7 +1308,7 @@
             <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Tambah Profil
           </button>
           <button onclick="openCloudSyncModal('connect')" class="px-3 py-2 text-xs font-semibold rounded-xl bg-purple-900/40 hover:bg-purple-900/60 border border-purple-500/40 text-purple-200 transition flex items-center gap-1.5">
-            <i data-lucide="cloud-download" class="w-3.5 h-3.5 text-purple-300"></i> Hubungkan Cloud
+            <i data-lucide="cloud-download" class="w-3.5 h-3.5 text-purple-300"></i> Masuk Profil Cloud
           </button>
         </div>
         <button onclick="closeProfileSwitchModal()" class="px-3.5 py-2 text-xs font-semibold rounded-xl text-[#9f96b5] hover:text-white hover:bg-white/5 transition">
@@ -1656,6 +1723,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=3.3"></script>
+  <script src="app.js?v=4.0"></script>
 </body>
 </html>

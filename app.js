@@ -260,19 +260,23 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return loadStateFromObject(parsed);
+      const stateObj = loadStateFromObject(parsed);
+      stateObj._isFreshDevice = false;
+      return stateObj;
     }
   } catch (e) {
     console.error('Failed to load local storage state:', e);
   }
   const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
   syncProfileToState(fresh, fresh.profiles[0]);
+  fresh._isFreshDevice = true;
   return fresh;
 }
 
 function saveState() {
   try {
     syncStateToActiveProfile();
+    state._isFreshDevice = false;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     syncActiveProfileToCloud();
   } catch (e) {
@@ -2243,10 +2247,19 @@ const FIREBASE_CONFIG = {
 };
 
 let firebaseDb = null;
+const CLIENT_ID = 'cli_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
 let isFirebaseReady = false;
 let activeCloudListenerRef = null;
 let isRemoteSyncInProgress = false;
 let cloudPushDebounceTimer = null;
+let cachedCloudDirectory = {};
+let pendingCloudPromptKey = null;
+
+function getProfileCloudKey(name) {
+  if (!name) return 'haryo_seno';
+  const clean = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+  return clean || 'haryo_seno';
+}
 
 function initFirebase() {
   if (typeof window === 'undefined') return;
@@ -2266,6 +2279,21 @@ function initFirebase() {
   } catch (err) {
     console.warn('Firebase init warning:', err);
     updateCloudStatusUI('offline');
+  }
+}
+
+function initCloudDirectoryListener() {
+  if (!isFirebaseReady || !firebaseDb) return;
+  try {
+    firebaseDb.ref('capita_directory').on('value', (snapshot) => {
+      cachedCloudDirectory = snapshot.val() || {};
+      renderCloudProfilesInSwitchModal();
+      populateCloudConnectDropdown();
+    }, (err) => {
+      console.warn('Firebase Directory listener warning:', err);
+    });
+  } catch (err) {
+    console.warn('Directory listener init error:', err);
   }
 }
 
@@ -2304,6 +2332,7 @@ function updateCloudStatusUI(status = 'connected') {
 function syncActiveProfileToCloud(isImmediate = false) {
   if (!isFirebaseReady || !firebaseDb) return;
   if (isRemoteSyncInProgress) return;
+  if (state._isFreshDevice) return; // Prevent unauthenticated fresh device from overwriting
 
   const active = getActiveProfile();
   if (!active) return;
@@ -2312,40 +2341,66 @@ function syncActiveProfileToCloud(isImmediate = false) {
   }
 
   active.updatedAt = Date.now();
+  const cloudKey = getProfileCloudKey(active.name);
 
   const doPush = () => {
     try {
       updateCloudStatusUI('syncing');
-      const payload = {
-        syncKey: active.cloudSyncKey,
-        updatedAt: active.updatedAt,
-        profile: {
-          id: active.id,
-          name: active.name,
-          role: active.role,
-          avatar: active.avatar,
-          color: active.color,
-          capital: active.capital,
-          passwordHash: active.passwordHash,
-          cloudSyncKey: active.cloudSyncKey,
-          cycle: active.cycle,
-          categories: active.categories,
-          expenses: active.expenses,
-          incomes: active.incomes,
-          analysisTab: active.analysisTab,
-          cycleOffset: active.cycleOffset,
-          updatedAt: active.updatedAt
-        }
+
+      const profileData = {
+        id: active.id,
+        name: active.name,
+        role: active.role || 'Personal',
+        avatar: active.avatar || '👤',
+        color: active.color || '#9d50ff',
+        capital: active.capital,
+        passwordHash: active.passwordHash || null,
+        cloudSyncKey: active.cloudSyncKey,
+        cycle: active.cycle,
+        categories: active.categories,
+        expenses: active.expenses,
+        incomes: active.incomes,
+        analysisTab: active.analysisTab || 'expense',
+        cycleOffset: active.cycleOffset || 0,
+        updatedAt: active.updatedAt
       };
 
-      firebaseDb.ref('capita_sync/' + active.cloudSyncKey).set(payload, (err) => {
+      const payload = {
+        key: cloudKey,
+        name: active.name,
+        updatedAt: active.updatedAt,
+        lastEditedBy: CLIENT_ID,
+        passwordHash: active.passwordHash || null,
+        profile: profileData
+      };
+
+      const dirEntry = {
+        key: cloudKey,
+        name: active.name,
+        role: active.role || 'Personal',
+        avatar: active.avatar || '👤',
+        color: active.color || '#9d50ff',
+        hasPassword: !!active.passwordHash,
+        updatedAt: active.updatedAt
+      };
+
+      // 1. Simpan di repository profil terpusat
+      firebaseDb.ref('capita_profiles/' + cloudKey).set(payload, (err) => {
         if (!err) {
           updateCloudStatusUI('synced');
         } else {
-          console.warn('Firebase set error:', err);
+          console.warn('Firebase set profile error:', err);
           updateCloudStatusUI('offline');
         }
       });
+
+      // 2. Perbarui indeks direktori publik
+      firebaseDb.ref('capita_directory/' + cloudKey).set(dirEntry);
+
+      // 3. Simpan juga di ref legacy sync code agar backward compatible
+      if (active.cloudSyncKey) {
+        firebaseDb.ref('capita_sync/' + active.cloudSyncKey).set(payload);
+      }
     } catch (e) {
       console.warn('Sync to cloud error:', e);
       updateCloudStatusUI('offline');
@@ -2364,25 +2419,28 @@ function syncActiveProfileToCloud(isImmediate = false) {
 function attachCloudListenerForActiveProfile() {
   if (!isFirebaseReady || !firebaseDb) return;
   const active = getActiveProfile();
-  if (!active || !active.cloudSyncKey) return;
+  if (!active) return;
 
   if (activeCloudListenerRef) {
     try { activeCloudListenerRef.off(); } catch (e) {}
     activeCloudListenerRef = null;
   }
 
-  const syncKey = active.cloudSyncKey;
-  activeCloudListenerRef = firebaseDb.ref('capita_sync/' + syncKey);
+  const cloudKey = getProfileCloudKey(active.name);
+  activeCloudListenerRef = firebaseDb.ref('capita_profiles/' + cloudKey);
 
   activeCloudListenerRef.on('value', (snapshot) => {
     const val = snapshot.val();
     if (!val || !val.profile) return;
 
+    // Abaikan jika update ini berasal dari perangkat ini sendiri
+    if (val.lastEditedBy === CLIENT_ID) return;
+
     const cloudUpdatedAt = val.updatedAt || 0;
     const localUpdatedAt = active.updatedAt || 0;
 
-    // Jika data dari cloud lebih baru setidaknya 600ms dari data lokal
-    if (cloudUpdatedAt > localUpdatedAt + 600) {
+    // Jika data dari cloud lebih baru atau sama (berasal dari perangkat lain)
+    if (cloudUpdatedAt >= localUpdatedAt) {
       isRemoteSyncInProgress = true;
       try {
         const cloudProf = val.profile;
@@ -2399,19 +2457,79 @@ function attachCloudListenerForActiveProfile() {
         active.updatedAt = cloudUpdatedAt;
 
         syncProfileToState(state, active);
+        const totalBase = (state.categories || []).reduce((s, c) => s + (Number(c.targetAmount) || 0), 0);
+        state.capital = totalBase;
+        active.capital = totalBase;
+
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         } catch (e) {}
 
         updateUI();
-        showToast('☁️ Data tersinkron dari perangkat lain!');
+        showToast('☁️ Data profil tersinkron dari perangkat lain!');
       } finally {
-        setTimeout(() => { isRemoteSyncInProgress = false; }, 800);
+        isRemoteSyncInProgress = false;
       }
     }
   }, (err) => {
     console.warn('Firebase Realtime listener error:', err);
   });
+}
+
+async function checkCloudProfileForFreshDevice() {
+  if (!isFirebaseReady || !firebaseDb) return;
+  const active = getActiveProfile();
+  const key = getProfileCloudKey(active.name);
+
+  try {
+    const snap = await firebaseDb.ref('capita_profiles/' + key).once('value');
+    const cloudVal = snap.val();
+
+    if (cloudVal && cloudVal.profile) {
+      // Profil ditemukan di Cloud!
+      const cloudProf = cloudVal.profile;
+      if (cloudProf.passwordHash) {
+        // Tampilkan modal sambutan untuk memasukkan Password
+        openQuickCloudPrompt(key, cloudProf.name, cloudProf.avatar, cloudProf.color, cloudProf.role);
+      } else {
+        // Jika belum ada password, otomatis sambungkan
+        applyDownloadedCloudProfile(cloudProf);
+      }
+    } else {
+      // Belum ada profil di cloud, jadikan perangkat ini sebagai pembuat awal
+      state._isFreshDevice = false;
+      attachCloudListenerForActiveProfile();
+      syncActiveProfileToCloud(true);
+    }
+  } catch (e) {
+    console.warn('Check cloud profile for fresh device failed:', e);
+  }
+}
+
+function applyDownloadedCloudProfile(cloudProf) {
+  let localProf = state.profiles.find(p => p.id === cloudProf.id || getProfileCloudKey(p.name) === getProfileCloudKey(cloudProf.name));
+  if (!localProf) {
+    localProf = JSON.parse(JSON.stringify(cloudProf));
+    state.profiles.push(localProf);
+  } else {
+    Object.assign(localProf, JSON.parse(JSON.stringify(cloudProf)));
+  }
+
+  state.activeProfileId = localProf.id;
+  state._isFreshDevice = false;
+  unlockProfileSession(localProf.id);
+  syncProfileToState(state, localProf);
+  const totalBasePos = (state.categories || []).reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
+  state.capital = totalBasePos;
+  localProf.capital = totalBasePos;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {}
+
+  attachCloudListenerForActiveProfile();
+  updateUI();
+  checkLockScreenState();
+  showToast(`☁️ Profil "${localProf.name}" terhubung dari Cloud!`);
 }
 
 function openCloudSyncModal(initialTab = 'share') {
@@ -2425,10 +2543,55 @@ function openCloudSyncModal(initialTab = 'share') {
   }
 
   const nameEl = document.getElementById('cloudShareProfName');
-  const codeEl = document.getElementById('cloudSyncCodeDisplay');
-  if (nameEl) nameEl.innerText = active.name;
-  if (codeEl) codeEl.innerText = active.cloudSyncKey;
+  const nameGuideEl = document.getElementById('cloudShareProfNameGuide');
+  const avatarEl = document.getElementById('cloudActiveAvatar');
+  const passContainer = document.getElementById('cloudPassStatusContainer');
 
+  if (nameEl) nameEl.innerText = active.name;
+  if (nameGuideEl) nameGuideEl.innerText = active.name;
+
+  if (avatarEl) {
+    avatarEl.innerText = active.avatar || '👤';
+    const color = active.color || '#9d50ff';
+    avatarEl.style.backgroundColor = hexToRgba(color, 0.25);
+    avatarEl.style.borderColor = hexToRgba(color, 0.5);
+    avatarEl.style.color = color;
+  }
+
+  // Render status password profil aktif
+  if (passContainer) {
+    if (active.passwordHash) {
+      passContainer.className = 'p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 text-xs space-y-2';
+      passContainer.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="flex items-center gap-2 font-bold text-emerald-300">
+            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i> Profil Terproteksi Password/PIN
+          </span>
+          <button type="button" onclick="closeCloudSyncModal(); openProfileEditModal('${active.id}');" class="text-[11px] text-purple-300 hover:text-white underline font-semibold">
+            Ubah Password
+          </button>
+        </div>
+        <p class="text-[11px] text-[#e2d9f3] leading-relaxed">
+          Profil ini aman dan siap dibuka di HP atau laptop lain. Kamu cukup memasukkan Password saat membuka di perangkat baru.
+        </p>
+      `;
+    } else {
+      passContainer.className = 'p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs space-y-2';
+      passContainer.innerHTML = `
+        <div class="flex items-center gap-2 font-bold text-amber-300">
+          <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i> Belum Dipasangi Password
+        </div>
+        <p class="text-[11px] text-[#e2d9f3] leading-relaxed">
+          Pasang Password/PIN sekarang agar profilmu terlindungi dan bisa langsung dibuka di HP kamu tanpa perlu setting kode apa pun.
+        </p>
+        <button type="button" onclick="closeCloudSyncModal(); openQuickSetPinModal('${active.id}');" class="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition flex items-center gap-1.5 shadow-md">
+          <i data-lucide="key" class="w-3.5 h-3.5"></i> Pasang Password / PIN Sekarang
+        </button>
+      `;
+    }
+  }
+
+  populateCloudConnectDropdown();
   switchCloudSyncTab(initialTab);
   modal.classList.remove('hidden');
   if (window.lucide) lucide.createIcons();
@@ -2462,21 +2625,41 @@ function switchCloudSyncTab(tab) {
     }
     contentShare?.classList.add('hidden');
     contentConnect?.classList.remove('hidden');
-    setTimeout(() => document.getElementById('cloudInputSyncCode')?.focus(), 150);
+    setTimeout(() => {
+      const select = document.getElementById('cloudSelectProfile');
+      if (select && select.options.length > 1) select.focus();
+      else document.getElementById('cloudInputProfName')?.focus();
+    }, 150);
   }
 }
 
-function copyCloudSyncCode() {
-  const active = getActiveProfile();
-  const code = active.cloudSyncKey || 'SENO-7721';
-  if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(code).then(() => {
-      showToast(`Kode "${code}" berhasil disalin! 📋`);
-    }).catch(() => {
-      prompt('Salin Kode Sinkronisasi:', code);
-    });
-  } else {
-    prompt('Salin Kode Sinkronisasi:', code);
+function populateCloudConnectDropdown() {
+  const select = document.getElementById('cloudSelectProfile');
+  if (!select) return;
+
+  const keys = Object.keys(cachedCloudDirectory);
+  if (keys.length === 0) {
+    select.innerHTML = '<option value="">-- Belum ada profil terdeteksi di Cloud --</option>';
+    return;
+  }
+
+  let optionsHtml = '<option value="">-- Pilih Profil dari Cloud (' + keys.length + ' Ditemukan) --</option>';
+  keys.forEach(k => {
+    const entry = cachedCloudDirectory[k];
+    if (entry && entry.name) {
+      const lockIcon = entry.hasPassword ? '🔒 ' : '';
+      optionsHtml += `<option value="${entry.key}">${lockIcon}${escapeHtml(entry.name)} (${escapeHtml(entry.role || 'Personal')})</option>`;
+    }
+  });
+  select.innerHTML = optionsHtml;
+}
+
+function onSelectCloudProfileChange(val) {
+  const inputProfName = document.getElementById('cloudInputProfName');
+  if (!inputProfName) return;
+  if (val && cachedCloudDirectory[val]) {
+    inputProfName.value = cachedCloudDirectory[val].name;
+    document.getElementById('cloudInputPin')?.focus();
   }
 }
 
@@ -2485,21 +2668,97 @@ function manualTriggerCloudSync() {
   showToast('☁️ Sinkronisasi ke Cloud berhasil dijalankan!');
 }
 
-async function submitConnectCloudProfile() {
+async function connectCloudProfileWithNameAndPassword(nameOrKey, inputPin) {
   if (!isFirebaseReady || !firebaseDb) {
-    alert('Koneksi ke Firebase Database sedang tidak tersedia. Periksa koneksi internet Anda.');
-    return;
+    throw new Error('Koneksi ke Firebase Database sedang tidak tersedia. Periksa internet Anda.');
   }
 
-  const inputSyncCode = document.getElementById('cloudInputSyncCode')?.value?.trim().toUpperCase();
+  const cleanInput = (nameOrKey || '').trim();
+  if (!cleanInput) {
+    throw new Error('Harap pilih atau masukkan nama profil!');
+  }
+
+  const cloudKey = getProfileCloudKey(cleanInput);
+
+  // 1. Ambil data dari Firebase capita_profiles
+  let snapshot = await firebaseDb.ref('capita_profiles/' + cloudKey).once('value');
+  let data = snapshot.val();
+
+  // Fallback 1: Jika tidak ditemukan dengan key slug, cari di cachedCloudDirectory
+  if (!data || !data.profile) {
+    const foundKey = Object.keys(cachedCloudDirectory).find(k => {
+      const entry = cachedCloudDirectory[k];
+      return entry && entry.name && entry.name.toLowerCase() === cleanInput.toLowerCase();
+    });
+    if (foundKey) {
+      snapshot = await firebaseDb.ref('capita_profiles/' + foundKey).once('value');
+      data = snapshot.val();
+    }
+  }
+
+  // Fallback 2: Periksa capita_sync jika pengguna memasukkan sync code legacy
+  if (!data || !data.profile) {
+    snapshot = await firebaseDb.ref('capita_sync/' + cleanInput.toUpperCase()).once('value');
+    data = snapshot.val();
+  }
+
+  if (!data || !data.profile) {
+    throw new Error(`Profil "${cleanInput}" tidak ditemukan di database Cloud! Pastikan nama profil sudah benar.`);
+  }
+
+  const cloudProf = data.profile;
+
+  // 2. Verifikasi Password / PIN jika profil cloud dilindungi password
+  if (cloudProf.passwordHash) {
+    if (!inputPin) {
+      throw new Error('Profil ini dilindungi Password/PIN. Harap masukkan Password profil.');
+    }
+    const pinHash = await hashPassword(inputPin);
+    if (pinHash !== cloudProf.passwordHash) {
+      throw new Error('Password / PIN profil salah! Harap masukkan password yang benar.');
+    }
+  }
+
+  // 3. Masukkan atau perbarui profil ke daftar profil lokal
+  let localProf = state.profiles.find(p => p.id === cloudProf.id || getProfileCloudKey(p.name) === getProfileCloudKey(cloudProf.name));
+  if (!localProf) {
+    localProf = JSON.parse(JSON.stringify(cloudProf));
+    state.profiles.push(localProf);
+  } else {
+    Object.assign(localProf, JSON.parse(JSON.stringify(cloudProf)));
+  }
+
+  state.activeProfileId = localProf.id;
+  state._isFreshDevice = false;
+  unlockProfileSession(localProf.id);
+  syncProfileToState(state, localProf);
+  const totalBasePos = (state.categories || []).reduce((sum, c) => sum + (Number(c.targetAmount) || 0), 0);
+  state.capital = totalBasePos;
+  localProf.capital = totalBasePos;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {}
+
+  attachCloudListenerForActiveProfile();
+  updateUI();
+  checkLockScreenState();
+
+  return localProf;
+}
+
+async function submitConnectCloudProfile() {
+  const selectVal = document.getElementById('cloudSelectProfile')?.value?.trim();
+  const inputName = document.getElementById('cloudInputProfName')?.value?.trim();
   const inputPin = document.getElementById('cloudInputPin')?.value?.trim() || '';
   const errEl = document.getElementById('cloudConnectError');
   const errText = document.getElementById('cloudConnectErrorText');
   const btn = document.getElementById('cloudConnectBtn');
 
-  if (!inputSyncCode) {
+  const chosenName = inputName || (selectVal && cachedCloudDirectory[selectVal] ? cachedCloudDirectory[selectVal].name : selectVal);
+
+  if (!chosenName) {
     if (errEl && errText) {
-      errText.innerText = 'Harap masukkan Kode Sinkronisasi!';
+      errText.innerText = 'Harap pilih atau masukkan nama profil!';
       errEl.classList.remove('hidden');
     }
     return;
@@ -2512,59 +2771,161 @@ async function submitConnectCloudProfile() {
   }
 
   try {
-    const snapshot = await firebaseDb.ref('capita_sync/' + inputSyncCode).once('value');
-    const data = snapshot.val();
-
-    if (!data || !data.profile) {
-      if (errEl && errText) {
-        errText.innerText = `Kode "${inputSyncCode}" tidak ditemukan di database cloud! Pastikan kode sudah benar.`;
-        errEl.classList.remove('hidden');
-      }
-      return;
-    }
-
-    const cloudProf = data.profile;
-
-    // Verifikasi PIN jika profil cloud dilindungi password
-    if (cloudProf.passwordHash) {
-      const pinHash = await hashPassword(inputPin);
-      if (pinHash !== cloudProf.passwordHash) {
-        if (errEl && errText) {
-          errText.innerText = 'PIN/Password profil salah! Harap masukkan PIN yang benar.';
-          errEl.classList.remove('hidden');
-        }
-        return;
-      }
-    }
-
-    // Sukses! Masukkan atau perbarui profil ke daftar profil lokal
-    let localProf = state.profiles.find(p => p.cloudSyncKey === inputSyncCode || p.id === cloudProf.id);
-    if (!localProf) {
-      localProf = { ...cloudProf };
-      state.profiles.push(localProf);
-    } else {
-      Object.assign(localProf, cloudProf);
-    }
-
-    unlockProfileSession(localProf.id);
-    doSwitchProfile(localProf.id);
+    const prof = await connectCloudProfileWithNameAndPassword(chosenName, inputPin);
     closeCloudSyncModal();
     closeProfileSwitchModal();
-
-    showToast(`Profil "${localProf.name}" berhasil terhubung dari Cloud! ☁️🎉`);
-    alert(`Berhasil! Profil "${localProf.name}" kini tersinkronisasi otomatis antar perangkat.`);
+    showToast(`🎉 Profil "${prof.name}" berhasil terhubung secara Realtime!`);
+    alert(`Berhasil! Profil "${prof.name}" kini tersinkronisasi otomatis antar perangkat secara real-time.`);
   } catch (err) {
     if (errEl && errText) {
-      errText.innerText = 'Gagal mengambil data dari cloud: ' + err.message;
+      errText.innerText = err.message || 'Gagal menghubungkan profil.';
       errEl.classList.remove('hidden');
     }
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '<i data-lucide="cloud-download" class="w-4 h-4"></i> Hubungkan & Tarik Data Cloud';
+      btn.innerHTML = '<i data-lucide="cloud-download" class="w-4 h-4"></i> Hubungkan & Sinkronkan';
       if (window.lucide) lucide.createIcons();
     }
   }
+}
+
+// Quick Cloud Prompt Modal for Direct Click & Fresh Device Welcome
+function openQuickCloudPrompt(cloudKey, name, avatar, color, role) {
+  pendingCloudPromptKey = cloudKey;
+  const modal = document.getElementById('modalQuickCloudPrompt');
+  if (!modal) return;
+
+  const nameEl = document.getElementById('quickCloudTargetName');
+  const roleEl = document.getElementById('quickCloudTargetRole');
+  const avatarEl = document.getElementById('quickCloudAvatar');
+  const inputEl = document.getElementById('quickCloudPasswordInput');
+  const errEl = document.getElementById('quickCloudError');
+
+  if (nameEl) nameEl.innerText = name || 'Profil Cloud';
+  if (roleEl) roleEl.innerText = role ? `${role} • Firebase Cloud` : 'Firebase Cloud Realtime';
+
+  if (avatarEl) {
+    avatarEl.innerText = avatar || (name ? name.substring(0, 2).toUpperCase() : '👤');
+    const col = color || '#9d50ff';
+    avatarEl.style.backgroundColor = hexToRgba(col, 0.25);
+    avatarEl.style.borderColor = hexToRgba(col, 0.5);
+    avatarEl.style.color = col;
+  }
+
+  if (inputEl) {
+    inputEl.value = '';
+    setTimeout(() => inputEl.focus(), 150);
+  }
+  if (errEl) errEl.classList.add('hidden');
+
+  modal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeQuickCloudPrompt() {
+  pendingCloudPromptKey = null;
+  document.getElementById('modalQuickCloudPrompt')?.classList.add('hidden');
+}
+
+async function submitQuickCloudPrompt() {
+  if (!pendingCloudPromptKey) return;
+  const inputEl = document.getElementById('quickCloudPasswordInput');
+  const errEl = document.getElementById('quickCloudError');
+  const errText = document.getElementById('quickCloudErrorText');
+  const btn = document.getElementById('quickCloudSubmitBtn');
+  const pin = inputEl?.value?.trim() || '';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Menghubungkan...';
+    if (window.lucide) lucide.createIcons();
+  }
+
+  try {
+    const prof = await connectCloudProfileWithNameAndPassword(pendingCloudPromptKey, pin);
+    closeQuickCloudPrompt();
+    closeProfileSwitchModal();
+    showToast(`🎉 Profil "${prof.name}" berhasil terhubung secara Realtime!`);
+  } catch (err) {
+    if (errEl && errText) {
+      errText.innerText = err.message || 'Password salah!';
+      errEl.classList.remove('hidden');
+    }
+    if (inputEl) {
+      inputEl.classList.add('ring-2', 'ring-rose-500');
+      setTimeout(() => inputEl.classList.remove('ring-2', 'ring-rose-500'), 1000);
+      inputEl.focus();
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="cloud-download" class="w-3.5 h-3.5"></i> Hubungkan';
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+
+function renderCloudProfilesInSwitchModal() {
+  const section = document.getElementById('modalCloudProfilesSection');
+  const listContainer = document.getElementById('modalCloudProfilesList');
+  if (!section || !listContainer) return;
+
+  const keys = Object.keys(cachedCloudDirectory);
+  if (keys.length === 0) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  const cloudEntries = keys.map(k => cachedCloudDirectory[k]).filter(Boolean);
+  if (cloudEntries.length === 0) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+
+  listContainer.innerHTML = cloudEntries.map(entry => {
+    const isAlreadyLocal = state.profiles.some(p => getProfileCloudKey(p.name) === entry.key || p.name === entry.name);
+    const color = entry.color || '#9d50ff';
+    const bgRgba = hexToRgba(color, 0.18);
+    const borderRgba = hexToRgba(color, 0.45);
+
+    const statusBadge = isAlreadyLocal
+      ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0"><i data-lucide="check-circle" class="w-3 h-3 text-emerald-400"></i> Terpasang di Device Ini</span>`
+      : `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1 shrink-0"><i data-lucide="cloud" class="w-3 h-3 text-purple-400"></i> Tersedia di Cloud</span>`;
+
+    const passBadge = entry.hasPassword
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 flex items-center gap-1"><i data-lucide="lock" class="w-2.5 h-2.5"></i> Ber-Password</span>`
+      : `<span class="text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-slate-700/40 text-slate-400 border border-slate-600/30">Publik</span>`;
+
+    return `
+      <div class="p-3 rounded-2xl border border-purple-500/30 bg-[#170e2c] hover:bg-[#20143d] transition flex items-center justify-between gap-3 cursor-pointer group"
+        onclick="openQuickCloudPrompt('${entry.key}', '${escapeHtml(entry.name)}', '${escapeHtml(entry.avatar || '👤')}', '${color}', '${escapeHtml(entry.role || 'Personal')}')">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-bold shrink-0 transition group-hover:scale-105 shadow-md relative"
+            style="background-color: ${bgRgba}; border: 1.5px solid ${borderRgba}; color: ${color};">
+            ${escapeHtml(entry.avatar || '👤')}
+            <span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[8px]"><i data-lucide="cloud" class="w-2 h-2"></i></span>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <p class="font-bold text-white text-xs truncate">${escapeHtml(entry.name)}</p>
+              ${passBadge}
+              ${statusBadge}
+            </div>
+            <p class="text-[11px] text-[#9f96b5] truncate mt-0.5">${escapeHtml(entry.role || 'Personal')} &bull; Firebase Realtime Sync</p>
+          </div>
+        </div>
+
+        <button type="button" class="px-2.5 py-1.5 text-[11px] font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-sm transition flex items-center gap-1 shrink-0">
+          <i data-lucide="key" class="w-3 h-3"></i> Masuk
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
 }
 
 // ==========================================
@@ -3151,6 +3512,7 @@ function renderProfileSwitchModal() {
     `;
   }).join('');
 
+  renderCloudProfilesInSwitchModal();
   if (window.lucide) lucide.createIcons();
 }
 
@@ -3615,8 +3977,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Firebase Realtime Cloud Sync
   initFirebase();
-  attachCloudListenerForActiveProfile();
-  syncActiveProfileToCloud(true);
+  initCloudDirectoryListener();
+
+  if (!state._isFreshDevice) {
+    attachCloudListenerForActiveProfile();
+    syncActiveProfileToCloud(false);
+  } else {
+    checkCloudProfileForFreshDevice();
+  }
 
   updateUI();
   checkLockScreenState();
